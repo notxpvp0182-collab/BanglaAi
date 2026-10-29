@@ -17,7 +17,7 @@ import kotlin.math.sqrt
 object SpeakerVerifier {
 
     const val EMBEDDING_DIM = 16
-    const val DEFAULT_MATCH_THRESHOLD = 0.86f
+    const val DEFAULT_MATCH_THRESHOLD = 0.88f
     const val UNCERTAIN_LOWER_BOUND = 0.75f
 
     enum class MatchStatus {
@@ -45,7 +45,6 @@ object SpeakerVerifier {
         if (pcmSamples.size < sampleRate / 2) return null
 
         try {
-            // Normalize and filter active voiced frames
             val frameSize = 512
             val hopSize = 256
             val numBands = 12
@@ -80,13 +79,11 @@ object SpeakerVerifier {
                     }
                 }
                 val rms = sqrt(frameEnergy / frameSize)
-                // Only process voiced/active speech frames above silence floor
                 if (rms > 0.015) {
                     activeFrames++
                     totalRms += rms
                     totalZcr += zcr.toDouble() / frameSize
 
-                    // Estimate fundamental pitch period via autocorrelation (80Hz - 400Hz)
                     val minLag = sampleRate / 400
                     val maxLag = (sampleRate / 80).coerceAtMost(frameSize / 2)
                     var bestLag = minLag
@@ -101,30 +98,38 @@ object SpeakerVerifier {
                             bestLag = lag
                         }
                     }
-                    if (maxCorr > frameEnergy * 0.25) {
+                    if (maxCorr > frameEnergy * 0.20) {
                         pitchPeriodSum += (sampleRate.toDouble() / bestLag) / 400.0
                         pitchFrames++
                     }
 
-                    // Compute 12 log-spaced spectral band energies via Goertzel/DFT bins
+                    // Compute 12 spectral sub-band energies across vocal formants (bins 3..60)
                     var weightedFreqSum = 0.0
                     var magSum = 1e-9
+                    val frameBandPower = DoubleArray(numBands)
                     for (b in 0 until numBands) {
-                        val bin = 2 + b * 6 // Covers ~60Hz to ~2.4kHz vocal formants
-                        val omega = 2.0 * PI * bin / frameSize
-                        val coeff = 2.0 * cos(omega)
-                        var q1 = 0.0
-                        var q2 = 0.0
-                        for (i in 0 until frameSize) {
-                            val q0 = windowed[i] + coeff * q1 - q2
-                            q2 = q1
-                            q1 = q0
+                        val startBin = 3 + b * 4
+                        var subBandSum = 0.0
+                        for (bin in startBin until (startBin + 4)) {
+                            val omega = 2.0 * PI * bin / frameSize
+                            val coeff = 2.0 * cos(omega)
+                            var q1 = 0.0
+                            var q2 = 0.0
+                            for (i in 0 until frameSize) {
+                                val q0 = windowed[i] + coeff * q1 - q2
+                                q2 = q1
+                                q1 = q0
+                            }
+                            val power = (q1 * q1 + q2 * q2 - q1 * q2 * coeff).coerceAtLeast(0.0)
+                            subBandSum += sqrt(power)
                         }
-                        val power = (q1 * q1 + q2 * q2 - q1 * q2 * coeff).coerceAtLeast(1e-9)
-                        val logPower = ln(1.0 + power * 100.0)
-                        bandEnergies[b] += logPower
-                        weightedFreqSum += (b + 1) * logPower
-                        magSum += logPower
+                        frameBandPower[b] = subBandSum
+                        weightedFreqSum += (b + 1) * subBandSum
+                        magSum += subBandSum
+                    }
+                    // Normalize band distribution per frame so spectral shape dominates
+                    for (b in 0 until numBands) {
+                        bandEnergies[b] += (frameBandPower[b] / magSum) * 4.0
                     }
                     totalCentroid += (weightedFreqSum / magSum) / numBands
                 }
@@ -137,10 +142,10 @@ object SpeakerVerifier {
             for (b in 0 until numBands) {
                 rawFeature[b] = (bandEnergies[b] / activeFrames).toFloat()
             }
-            rawFeature[12] = (totalZcr / activeFrames).toFloat() * 5f
-            rawFeature[13] = (totalCentroid / activeFrames).toFloat() * 3f
-            rawFeature[14] = if (pitchFrames > 0) (pitchPeriodSum / pitchFrames).toFloat() * 4f else 0.4f
-            rawFeature[15] = (totalRms / activeFrames).toFloat() * 2f
+            rawFeature[12] = (totalZcr / activeFrames).toFloat() * 3f
+            rawFeature[13] = (totalCentroid / activeFrames).toFloat() * 2f
+            rawFeature[14] = if (pitchFrames > 0) (pitchPeriodSum / pitchFrames).toFloat() * 2.5f else 0.3f
+            rawFeature[15] = (totalRms / activeFrames).toFloat()
 
             return l2Normalize(rawFeature)
         } finally {
