@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.personal.bengaliagent.AgentApp
+import com.personal.bengaliagent.R
 import com.personal.bengaliagent.agent.ActionExecutor
 import com.personal.bengaliagent.agent.AgentPlanner
 import com.personal.bengaliagent.agent.PlannedAction
@@ -59,7 +60,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            startVoicePushToTalk()
+            unmuteMicrophoneContinuous()
         } else {
             Toast.makeText(this, "Microphone permission is required for voice input.", Toast.LENGTH_SHORT).show()
         }
@@ -79,7 +80,7 @@ class MainActivity : AppCompatActivity() {
             isAssistantEnabled = true
             updateState(AgentState.SCREEN_SHARING)
             appendSystemMessage(
-                "Screen sharing active. Open any coding or video editing app and tell me what to do—I will observe your screen and perform the actions directly.",
+                "Screen sharing active. Controls are in your notification panel. Open any coding or video editing app and tell me what to do.",
                 persist = false
             )
             refreshStatusUi()
@@ -161,7 +162,7 @@ class MainActivity : AppCompatActivity() {
                 binding.rvTranscript.scrollToPosition(messages.size - 1)
             } else {
                 appendSystemMessage(
-                    "Welcome to Bengali AI Agent. Tap the ⚙ Settings icon in the top-right corner to connect Gemini, Groq, or OpenRouter and enable AI Coding & Video Editing screen control.",
+                    "Welcome to Bengali AI Agent. Tap the top-right Settings icon to connect Gemini, Groq, or OpenRouter.",
                     persist = false
                 )
             }
@@ -182,7 +183,7 @@ class MainActivity : AppCompatActivity() {
                         binding.btnPauseResume.performClick()
                     }
                     AgentSessionBus.Command.STOP_CURRENT_TASK -> {
-                        stopAllCaptureAndTasks("Current task stopped from control bar.")
+                        stopAllCaptureAndTasks("Current task stopped from notification control.")
                         refreshStatusUi()
                     }
                     AgentSessionBus.Command.DISABLE_SESSION -> {
@@ -198,6 +199,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         isScreenSharing = ScreenCaptureManager.isSharingActive()
+        isMicMuted = !voiceManager.isMicUnmuted()
         lifecycleScope.launch {
             voiceManager.setLanguageTag(prefs.getVoiceLanguageTag())
         }
@@ -235,7 +237,7 @@ class MainActivity : AppCompatActivity() {
                 isScreenSharing = false
                 updateState(AgentState.PAUSED)
                 appendSystemMessage(
-                    "Assistant paused. Audio and screen capture have been stopped.",
+                    "Assistant paused. Audio and screen capture stopped.",
                     persist = false
                 )
             }
@@ -249,21 +251,23 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnMicToggle.setOnClickListener {
             if (currentState == AgentState.PAUSED) {
-                Toast.makeText(this, "Resume the assistant before enabling the microphone.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Resume the assistant before unmuting the microphone.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             if (!isMicMuted) {
+                // Click to Mute / Turn Off
                 voiceManager.stopListeningImmediately()
                 isMicMuted = true
                 updateState(AgentState.MUTED)
                 refreshStatusUi()
             } else {
+                // Click to Unmute / Keep Continuously On
                 val granted = ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.RECORD_AUDIO
                 ) == PackageManager.PERMISSION_GRANTED
                 if (granted) {
-                    startVoicePushToTalk()
+                    unmuteMicrophoneContinuous()
                 } else {
                     micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 }
@@ -291,9 +295,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startVoicePushToTalk() {
-        voiceManager.stopSpeaking()
+    private fun unmuteMicrophoneContinuous() {
+        isMicMuted = false
+        voiceManager.setContinuousMode(true)
         voiceManager.startListening()
+        refreshStatusUi()
     }
 
     private fun handleIncomingPrompt(prompt: String) {
@@ -355,7 +361,7 @@ class MainActivity : AppCompatActivity() {
                     ChatMessage(
                         id = 0L,
                         role = ChatMessage.Role.SYSTEM,
-                        text = "Use the following retrieved local memory records when answering questions about the past. If a requested past fact is not in these records, state honestly that it is not in memory:\n$memoryContext"
+                        text = "Use the following retrieved local memory records when answering questions about the past:\n$memoryContext"
                     )
                 )
             }
@@ -404,7 +410,7 @@ class MainActivity : AppCompatActivity() {
 
             if (!routed.success) {
                 appendSystemMessage(routed.replyText, persist = false)
-                updateState(AgentState.ERROR)
+                updateState(if (isMicMuted) AgentState.ERROR else AgentState.LISTENING)
                 refreshStatusUi()
                 return@launch
             }
@@ -447,7 +453,7 @@ class MainActivity : AppCompatActivity() {
                     if (prefs.isTtsAutoSpeakEnabled()) {
                         voiceManager.speak(summaryReport)
                     }
-                    updateState(AgentState.READY)
+                    updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
                     transcriptAdapter.submitList(messages)
                     binding.rvTranscript.scrollToPosition(messages.size - 1)
                     refreshStatusUi()
@@ -475,7 +481,7 @@ class MainActivity : AppCompatActivity() {
             )
             messages.add(assistantMsg)
             memoryRepo.saveChatMessage(assistantMsg)
-            updateState(AgentState.READY)
+            updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
 
             if (prefs.isTtsAutoSpeakEnabled()) {
                 voiceManager.speak(baseReply)
@@ -530,10 +536,24 @@ class MainActivity : AppCompatActivity() {
             if (currentState == AgentState.PAUSED) "Resume" else "Pause"
         binding.btnScreenToggle.text =
             if (isScreenSharing) "Screen: On" else "Screen: Off"
-        binding.btnMicToggle.text = if (isMicMuted) "🎤 Mic" else "🔴 Live"
 
-        val micStatus = if (isMicMuted) "Mic Off" else "Mic Live"
-        val screenStatus = if (isScreenSharing) "Screen Live" else "Screen Off"
+        // Update Mic vector icon & background style (No Emojis)
+        if (isMicMuted) {
+            binding.btnMicToggle.text = "Muted"
+            binding.btnMicToggle.setBackgroundResource(R.drawable.bg_btn_3d_dark)
+            binding.btnMicToggle.setCompoundDrawablesWithIntrinsicBounds(
+                R.drawable.ic_mic_off, 0, 0, 0
+            )
+        } else {
+            binding.btnMicToggle.text = "Unmuted"
+            binding.btnMicToggle.setBackgroundResource(R.drawable.bg_btn_3d_red)
+            binding.btnMicToggle.setCompoundDrawablesWithIntrinsicBounds(
+                R.drawable.ic_mic_on, 0, 0, 0
+            )
+        }
+
+        val micStatus = if (isMicMuted) "Mic Muted" else "Mic On"
+        val screenStatus = if (isScreenSharing) "Screen On" else "Screen Off"
         binding.tvPrivacyIndicator.text = "$micStatus | $screenStatus"
     }
 

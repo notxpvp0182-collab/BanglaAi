@@ -11,13 +11,22 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
+/**
+ * Supports true Toggle Mute/Unmute continuous voice session:
+ * - When unmuted, stays continuously active across utterances and silence timeouts.
+ * - While TTS speaks the assistant's reply, pauses mic capture briefly so it doesn't hear itself,
+ *   then automatically resumes listening as soon as TTS finishes.
+ * - Immediately stops when the user clicks Mic again to mute.
+ */
 class VoiceManager(
     private val context: Context,
     private val scope: CoroutineScope,
@@ -28,11 +37,12 @@ class VoiceManager(
 
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+    private var isTtsSpeaking = false
     private var speechRecognizer: SpeechRecognizer? = null
-    private var isCurrentlyListening = false
-    private var continuousModeEnabled = false
+    private var continuousSessionActive = false
     private var currentLanguageTag = "bn-BD"
     private var pcmRecordJob: Job? = null
+    private var restartListenJob: Job? = null
 
     init {
         tts = TextToSpeech(context.applicationContext, this)
@@ -45,11 +55,33 @@ class VoiceManager(
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.language = Locale.US
             }
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    isTtsSpeaking = true
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    isTtsSpeaking = false
+                    if (continuousSessionActive) {
+                        scheduleListeningRestart(250L)
+                    }
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) {
+                    isTtsSpeaking = false
+                    if (continuousSessionActive) {
+                        scheduleListeningRestart(250L)
+                    }
+                }
+            })
             isTtsReady = true
         } else {
             isTtsReady = false
         }
     }
+
+    fun isMicUnmuted(): Boolean = continuousSessionActive
 
     fun getTtsStatusDescription(): String {
         val engine = tts?.defaultEngine ?: "System Default"
@@ -78,10 +110,17 @@ class VoiceManager(
 
     fun speak(text: String) {
         if (!isTtsReady || text.isBlank()) return
+        // Pause recognizer while assistant speaks so it doesn't transcribe its own voice
+        try {
+            speechRecognizer?.cancel()
+        } catch (_: Exception) {
+        }
+        isTtsSpeaking = true
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "agent_utt_${System.currentTimeMillis()}")
     }
 
     fun stopSpeaking() {
+        isTtsSpeaking = false
         tts?.stop()
     }
 
@@ -90,43 +129,67 @@ class VoiceManager(
     }
 
     fun setContinuousMode(enabled: Boolean) {
-        continuousModeEnabled = enabled
+        continuousSessionActive = enabled
     }
 
+    /**
+     * Unmutes the microphone and keeps listening continuously until [stopListeningImmediately] is called.
+     */
     fun startListening() {
         stopSpeaking()
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onStatusUpdate(
-                "System SpeechRecognizer is unavailable on this device. You can use text input or configure Cloud STT in Voice Settings."
+                "System SpeechRecognizer is unavailable on this device."
             )
+            continuousSessionActive = false
             onListeningStateChanged(false)
             return
         }
 
-        if (speechRecognizer == null) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-                setRecognitionListener(recognitionListener)
-            }
-        }
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-            )
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, currentLanguageTag)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-
-        isCurrentlyListening = true
+        continuousSessionActive = true
         onListeningStateChanged(true)
-        speechRecognizer?.startListening(intent)
+        startRecognizerInternal()
     }
 
+    private fun startRecognizerInternal() {
+        if (!continuousSessionActive || isTtsSpeaking) return
+        try {
+            if (speechRecognizer == null) {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                    setRecognitionListener(recognitionListener)
+                }
+            }
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, currentLanguageTag)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            speechRecognizer?.startListening(intent)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun scheduleListeningRestart(delayMs: Long = 350L) {
+        restartListenJob?.cancel()
+        restartListenJob = scope.launch(Dispatchers.Main) {
+            delay(delayMs)
+            if (continuousSessionActive && !isTtsSpeaking) {
+                startRecognizerInternal()
+            }
+        }
+    }
+
+    /**
+     * Immediately mutes the microphone and stops all active audio capture.
+     */
     fun stopListeningImmediately() {
-        continuousModeEnabled = false
-        isCurrentlyListening = false
+        continuousSessionActive = false
+        restartListenJob?.cancel()
+        restartListenJob = null
         pcmRecordJob?.cancel()
         pcmRecordJob = null
         try {
@@ -200,31 +263,25 @@ class VoiceManager(
     }
 
     private val recognitionListener = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {
-            onStatusUpdate("Listening ($currentLanguageTag)... Speak now.")
-        }
-
+        override fun onReadyForSpeech(params: Bundle?) {}
         override fun onBeginningOfSpeech() {}
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
-
-        override fun onEndOfSpeech() {
-            isCurrentlyListening = false
-            onListeningStateChanged(false)
-        }
+        override fun onEndOfSpeech() {}
 
         override fun onError(error: Int) {
-            isCurrentlyListening = false
-            onListeningStateChanged(false)
-            val msg = when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized. Please try speaking again."
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timed out. Tap the microphone to try again."
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required for voice input."
-                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                    "Network error during speech recognition."
-                else -> "Speech recognition error (Code: $error)."
+            if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                continuousSessionActive = false
+                onListeningStateChanged(false)
+                onStatusUpdate("Microphone permission is required.")
+                return
             }
-            onStatusUpdate(msg)
+            // If the user has not muted the mic, automatically continue listening after silence/no-match
+            if (continuousSessionActive) {
+                scheduleListeningRestart(400L)
+            } else {
+                onListeningStateChanged(false)
+            }
         }
 
         override fun onResults(results: Bundle?) {
@@ -233,11 +290,9 @@ class VoiceManager(
             if (text.isNotEmpty()) {
                 onTranscriptReady(text)
             }
-            if (continuousModeEnabled) {
-                startListening()
-            } else {
-                isCurrentlyListening = false
-                onListeningStateChanged(false)
+            // Keep mic active for the next sentence unless muted by user
+            if (continuousSessionActive && !isTtsSpeaking) {
+                scheduleListeningRestart(350L)
             }
         }
 

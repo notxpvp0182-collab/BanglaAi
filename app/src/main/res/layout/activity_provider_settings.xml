@@ -65,7 +65,7 @@
             <CheckBox
                 android:id="@+id/cbAiCodingCapability"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="38dp"
                 android:layout_marginTop="8dp"
                 android:checked="true"
                 android:text="Enable AI Coding in External Apps"
@@ -76,7 +76,7 @@
             <CheckBox
                 android:id="@+id/cbAiVideoCapability"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="38dp"
                 android:checked="true"
                 android:text="Enable AI Video Editing via Screen Control"
                 android:textColor="@color/text_primary"
@@ -105,7 +105,7 @@
                 android:id="@+id/btnOpenPermissionsHub"
                 style="@style/Widget.BengaliAgent.Button.Primary"
                 android:layout_width="match_parent"
-                android:layout_height="50dp"
+                android:layout_height="40dp"
                 android:layout_marginTop="10dp"
                 android:text="Permissions &amp; Accessibility Status" />
 
@@ -119,7 +119,7 @@
                     android:id="@+id/btnOpenVoiceHub"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="38dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
                     android:text="Voice Settings"
@@ -129,7 +129,7 @@
                     android:id="@+id/btnOpenMemoryHub"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="38dp"
                     android:layout_weight="1"
                     android:text="Memory Brain"
                     android:textSize="12sp" />
@@ -177,7 +177,7 @@
             <EditText
                 android:id="@+id/etGeminiKey"
                 android:layout_width="match_parent"
-                android:layout_height="50dp"
+                android:layout_height="40dp"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_badge"
                 android:hint="@string/hint_enter_gemini_api_key"
@@ -217,7 +217,7 @@
                 android:id="@+id/btnConnectGemini"
                 style="@style/Widget.BengaliAgent.Button.Primary"
                 android:layout_width="match_parent"
-                android:layout_height="50dp"
+                android:layout_height="40dp"
                 android:layout_marginTop="10dp"
                 android:text="@string/action_connect_gemini" />
 
@@ -231,7 +231,7 @@
                     android:id="@+id/btnRetryGemini"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="38dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
                     android:text="@string/action_retry"
@@ -241,7 +241,7 @@
                     android:id="@+id/btnDisconnectGemini"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="38dp"
                     android:layout_weight="1"
                     android:text="@string/action_disconnect" />
             </LinearLayout>
@@ -287,7 +287,7 @@
             <EditText
                 android:id="@+id/etGroqKey"
                 android:layout_width="match_parent"
-                android:layout_height="50dp"
+                android:layout_height="40dp"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_badge"
                 android:hint="Enter Groq API Key (gsk_...)"
@@ -325,7 +325,7 @@
                     android:id="@+id/btnConnectGroq"
                     style="@style/Widget.BengaliAgent.Button.Primary"
                     android:layout_width="0dp"
-                    android:layout_height="50dp"
+                    android:layout_height="40dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
                     android:text="Connect Groq" />
@@ -334,7 +334,7 @@
                     android:id="@+id/btnDisconnectGroq"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="wrap_content"
-                    android:layout_height="50dp"
+                    android:layout_height="40dp"
                     android:text="Disconnect" />
             </LinearLayout>
         </LinearLayout>
@@ -379,7 +379,7 @@
             <EditText
                 android:id="@+id/etOpenRouterKey"
                 android:layout_width="match_parent"
-                android:layout_height="50dp"
+                android:layout_height="40dp"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_badge"
                 android:hint="Enter OpenRouter Key (sk-or-...)"
@@ -417,7 +417,7 @@
                     android:id="@+id/btnConnectOpenRouter"
                     style="@style/Widget.BengaliAgent.Button.Primary"
                     android:layout_width="0dp"
-                    android:layout_height="50dp"
+                    android:layout_height="40dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
                     android:text="Connect OpenRouter" />
@@ -426,7 +426,7 @@
                     android:id="@+id/btnDisconnectOpenRouter"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="wrap_content"
-                    android:layout_height="50dp"
+                    android:layout_height="40dp"
                     android:text="Disconnect" />
             </LinearLayout>
         </LinearLayout>
@@ -443,7 +443,7 @@
             <CheckBox
                 android:id="@+id/cbCloudConsent"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="38dp"
                 android:checked="true"
                 android:text="Allow sending prompts to connected cloud AI providers"
                 android:textColor="@color/text_primary"
@@ -454,7 +454,7 @@
             android:id="@+id/btnCloseSettings"
             style="@style/Widget.BengaliAgent.Button.Secondary"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="40dp"
             android:layout_marginTop="16dp"
             android:text="Back to Assistant" />
 
