@@ -19,6 +19,7 @@ object KeyValidator {
         }
         return when (provider) {
             ProviderType.GEMINI -> {
+                // Supports both standard AIza... keys and newer AQ.... tokens
                 if (trimmed.length >= 20) {
                     ValidationResult(true, "Key format is valid.")
                 } else {
@@ -45,6 +46,7 @@ object KeyValidator {
     fun redactSecrets(input: String): String {
         return input
             .replace(Regex("AIza[0-9A-Za-z\\-_]{16,}"), "AIza***REDACTED***")
+            .replace(Regex("AQ\\.[0-9A-Za-z\\-_\\.]{16,}"), "AQ.***REDACTED***")
             .replace(Regex("gsk_[0-9A-Za-z]{16,}"), "gsk_***REDACTED***")
             .replace(Regex("sk-or-[0-9A-Za-z\\-_]{16,}"), "sk-or-***REDACTED***")
     }
