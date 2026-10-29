@@ -32,7 +32,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (!granted) {
-            Toast.makeText(this, "মাইক্রোফোন অনুমতি প্রয়োজন", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Microphone permission is required.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -66,7 +66,6 @@ class VoiceSettingsActivity : AppCompatActivity() {
             }
             binding.cbAutoSpeak.isChecked = prefs.isTtsAutoSpeakEnabled()
 
-            // Wait briefly for TTS engine initialization
             delay(500)
             binding.tvTtsEngineStatus.text = voiceManager.getTtsStatusDescription()
             val voices = voiceManager.getAvailableVoicesForBengaliAndEnglish()
@@ -105,7 +104,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
         }
 
         binding.btnTestTts.setOnClickListener {
-            voiceManager.speak("নমস্কার, আমি আপনার ব্যক্তিগত বাংলা এআই সহকারী।")
+            voiceManager.speak("Hello, I am your personal Bengali AI Agent.")
         }
     }
 
@@ -115,21 +114,21 @@ class VoiceSettingsActivity : AppCompatActivity() {
             val groqKey = keyStore.getApiKey(ProviderType.GROQ).orEmpty()
             if (groqKey.isBlank()) {
                 binding.tvCloudSttResult.text =
-                    "প্রথমে 'API ও সেটিংস' থেকে Groq API Key যোগ করুন।"
+                    "System SpeechRecognizer is active by default. Cloud Whisper STT is optional."
                 return@setOnClickListener
             }
-            binding.tvCloudSttResult.text = "৩ সেকেন্ডের জন্য বাংলায় কিছু বলুন..."
+            binding.tvCloudSttResult.text = "Speak now for 3 seconds..."
             voiceManager.captureShortPcmSample(durationMs = 3000) { samples ->
                 if (samples == null) {
-                    binding.tvCloudSttResult.text = "অডিও ক্যাপচার ব্যর্থ হয়েছে।"
+                    binding.tvCloudSttResult.text = "Audio capture failed."
                     return@captureShortPcmSample
                 }
                 lifecycleScope.launch {
-                    binding.tvCloudSttResult.text = "Groq Whisper-এ ট্রান্সক্রিপশন চলছে..."
+                    binding.tvCloudSttResult.text = "Transcribing audio..."
                     val res = cloudSttClient.transcribePcmWithGroqWhisper(groqKey, samples)
                     samples.fill(0)
                     binding.tvCloudSttResult.text = if (res.success) {
-                        "শনাক্তকৃত টেক্সট: ${res.text}"
+                        "Transcribed: ${res.text}"
                     } else {
                         res.errorMessageBn
                     }
@@ -151,16 +150,16 @@ class VoiceSettingsActivity : AppCompatActivity() {
         binding.btnEnrollVoice.setOnClickListener {
             if (!ensureMicPermission()) return@setOnClickListener
             binding.tvSpeakerEnrollStatus.text =
-                "নিবন্ধন চলছে... স্বাভাবিক কণ্ঠে ২.৫ সেকেন্ড কথা বলুন (যেমন: 'আমি আমার কণ্ঠ নিবন্ধন করছি')..."
+                "Recording 2.5 seconds of speech... Please speak naturally."
             voiceManager.captureShortPcmSample(durationMs = 2500) { samples ->
                 if (samples == null) {
-                    binding.tvSpeakerEnrollStatus.text = "মাইক্রোফোন থেকে অডিও পাওয়া যায়নি।"
+                    binding.tvSpeakerEnrollStatus.text = "Could not capture audio from microphone."
                     return@captureShortPcmSample
                 }
                 val embedding = SpeakerVerifier.extractEmbedding(samples, zeroOutBuffer = true)
                 if (embedding == null) {
                     binding.tvSpeakerEnrollStatus.text =
-                        "পর্যাপ্ত কণ্ঠস্বর পাওয়া যায়নি। একটু স্পষ্টভাবে আবার চেষ্টা করুন।"
+                        "Insufficient voice energy detected. Please speak clearly and try again."
                 } else {
                     lifecycleScope.launch {
                         prefs.setEnrolledSpeakerEmbedding(
@@ -168,7 +167,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
                         )
                         prefs.setSpeakerDetectionEnabled(true)
                         binding.cbEnableSpeakerMatch.isChecked = true
-                        refreshEnrollmentStatus("কণ্ঠ সফলভাবে নিবন্ধিত হয়েছে (মূল অডিও মুছে ফেলা হয়েছে)।")
+                        refreshEnrollmentStatus("Voice enrolled locally (raw audio zeroed and discarded).")
                     }
                 }
             }
@@ -180,13 +179,13 @@ class VoiceSettingsActivity : AppCompatActivity() {
                 val enrolledStr = prefs.getEnrolledSpeakerEmbedding()
                 val enrolledVec = SpeakerVerifier.deserializeEmbedding(enrolledStr)
                 if (enrolledVec == null) {
-                    binding.tvSpeakerEnrollStatus.text = "প্রথমে 'Enroll My Voice' বাটনে চাপুন।"
+                    binding.tvSpeakerEnrollStatus.text = "Please tap 'Enroll My Voice' first."
                     return@launch
                 }
-                binding.tvSpeakerEnrollStatus.text = "পরীক্ষা চলছে... ২.৫ সেকেন্ড কথা বলুন..."
+                binding.tvSpeakerEnrollStatus.text = "Testing voice match... Speak for 2.5 seconds."
                 voiceManager.captureShortPcmSample(durationMs = 2500) { samples ->
                     if (samples == null) {
-                        binding.tvSpeakerEnrollStatus.text = "অডিও ক্যাপচার ব্যর্থ হয়েছে।"
+                        binding.tvSpeakerEnrollStatus.text = "Audio capture failed."
                         return@captureShortPcmSample
                     }
                     val candidateVec = SpeakerVerifier.extractEmbedding(samples, zeroOutBuffer = true)
@@ -195,16 +194,16 @@ class VoiceSettingsActivity : AppCompatActivity() {
                     when (outcome.status) {
                         SpeakerVerifier.MatchStatus.MATCHED -> {
                             binding.tvSpeakerEnrollStatus.text =
-                                "কণ্ঠ মিলেছে! (সাদৃশ্য: $scorePct%)"
+                                "Voice Matched! (Similarity: $scorePct%)"
                         }
                         SpeakerVerifier.MatchStatus.UNCERTAIN,
                         SpeakerVerifier.MatchStatus.DIFFERENT_SPEAKER -> {
                             val warn = outcome.warningMessageBn.orEmpty()
-                            binding.tvSpeakerEnrollStatus.text = "$warn (সাদৃশ্য: $scorePct%)"
-                            voiceManager.speak("আমি তোমার কণ্ঠ নিশ্চিত করতে পারছি না—দয়া করে নিজে নিশ্চিত করো।")
+                            binding.tvSpeakerEnrollStatus.text = "$warn (Similarity: $scorePct%)"
+                            voiceManager.speak("Could not verify your voice. Please confirm manually.")
                         }
                         SpeakerVerifier.MatchStatus.NOT_ENROLLED -> {
-                            binding.tvSpeakerEnrollStatus.text = "কোনো কণ্ঠ নিবন্ধিত নেই।"
+                            binding.tvSpeakerEnrollStatus.text = "Voice Status: Not Enrolled"
                         }
                     }
                 }
@@ -216,7 +215,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
                 prefs.setEnrolledSpeakerEmbedding(null)
                 prefs.setSpeakerDetectionEnabled(false)
                 binding.cbEnableSpeakerMatch.isChecked = false
-                refreshEnrollmentStatus("সংরক্ষিত কণ্ঠ প্রোফাইল সম্পূর্ণ মুছে ফেলা হয়েছে।")
+                refreshEnrollmentStatus("Stored voice profile deleted.")
             }
         }
     }
@@ -225,9 +224,9 @@ class VoiceSettingsActivity : AppCompatActivity() {
         val enrolled = prefs.getEnrolledSpeakerEmbedding()
         val hasEnrollment = !enrolled.isNullOrBlank()
         val baseStatus = if (hasEnrollment) {
-            "কণ্ঠের অবস্থা: নিবন্ধিত (On-device 16-D প্রোফাইল সক্রিয়)"
+            "Voice Status: Enrolled (On-device 16-D profile active)"
         } else {
-            "কণ্ঠের অবস্থা: নিবন্ধিত নয়"
+            "Voice Status: Not Enrolled"
         }
         binding.tvSpeakerEnrollStatus.text = if (customPrefix != null) {
             "$customPrefix\n$baseStatus"

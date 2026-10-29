@@ -13,11 +13,6 @@ import com.personal.bengaliagent.R
 import com.personal.bengaliagent.screen.ScreenCaptureManager
 import com.personal.bengaliagent.ui.main.MainActivity
 
-/**
- * Foreground service for user-started sessions with ongoing notification controls:
- * Mute/Unmute, Pause/Resume, Stop Task, and Disable Session.
- * Also starts MediaProjection when the user explicitly grants consent.
- */
 class AgentForegroundService : Service() {
 
     private lateinit var floatingBar: FloatingControlBarManager
@@ -68,7 +63,7 @@ class AgentForegroundService : Service() {
                 if (projData != null) {
                     ScreenCaptureManager.startProjection(this, resultCode, projData)
                 }
-                floatingBar.showIfPermitted("● স্ক্রিন শেয়ার চালু")
+                floatingBar.showIfPermitted("● Screen Sharing")
             }
             else -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -83,7 +78,7 @@ class AgentForegroundService : Service() {
                         buildNotification(isScreenSharing = ScreenCaptureManager.isSharingActive())
                     )
                 }
-                floatingBar.showIfPermitted("● এআই সক্রিয়")
+                floatingBar.showIfPermitted("● Agent Active")
             }
         }
         return START_NOT_STICKY
@@ -99,9 +94,9 @@ class AgentForegroundService : Service() {
         )
 
         val statusText = if (isScreenSharing) {
-            "সক্রিয়: স্ক্রিন শেয়ারিং চালু আছে"
+            "Active: Screen sharing is live"
         } else {
-            "সক্রিয় সেশন: কথা বলুন বা নির্দেশ দিন"
+            "Active session: Ready for voice or text commands"
         }
 
         return NotificationCompat.Builder(this, AgentApp.CHANNEL_ACTIVE_SESSION)
@@ -110,10 +105,10 @@ class AgentForegroundService : Service() {
             .setContentText(statusText)
             .setOngoing(true)
             .setContentIntent(pendingOpen)
-            .addAction(0, "মাইক (Mute)", actionPendingIntent(ACTION_MUTE_TOGGLE, 10))
-            .addAction(0, "বিরতি (Pause)", actionPendingIntent(ACTION_PAUSE_TOGGLE, 11))
-            .addAction(0, "থামুন (Stop)", actionPendingIntent(ACTION_STOP_TASK, 12))
-            .addAction(0, "বন্ধ (Disable)", actionPendingIntent(ACTION_DISABLE_SESSION, 13))
+            .addAction(0, "Mute", actionPendingIntent(ACTION_MUTE_TOGGLE, 10))
+            .addAction(0, "Pause", actionPendingIntent(ACTION_PAUSE_TOGGLE, 11))
+            .addAction(0, "Stop", actionPendingIntent(ACTION_STOP_TASK, 12))
+            .addAction(0, "Disable", actionPendingIntent(ACTION_DISABLE_SESSION, 13))
             .build()
     }
 

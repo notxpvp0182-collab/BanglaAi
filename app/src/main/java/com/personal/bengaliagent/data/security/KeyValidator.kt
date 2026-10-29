@@ -6,37 +6,37 @@ object KeyValidator {
 
     data class ValidationResult(
         val isValidFormat: Boolean,
-        val reasonBn: String
+        val reason: String
     )
 
     fun validateFormat(provider: ProviderType, rawKey: String): ValidationResult {
         val trimmed = rawKey.trim()
         if (trimmed.isEmpty()) {
-            return ValidationResult(false, "API Key খালি রাখা যাবে না।")
+            return ValidationResult(false, "API key cannot be empty. Please enter your Gemini API key.")
         }
-        if (trimmed.contains(" ") || trimmed.contains("\n")) {
-            return ValidationResult(false, "API Key-এর ভেতরে কোনো স্পেস বা নতুন লাইন থাকা যাবে না।")
+        if (trimmed.contains(" ") || trimmed.contains("\n") || trimmed.contains("\t")) {
+            return ValidationResult(false, "API key must not contain spaces or line breaks.")
         }
         return when (provider) {
             ProviderType.GEMINI -> {
-                if (trimmed.startsWith("AIza") && trimmed.length >= 30) {
-                    ValidationResult(true, "ফরম্যাট সঠিক মনে হচ্ছে।")
+                if (trimmed.length >= 20) {
+                    ValidationResult(true, "Key format is valid.")
                 } else {
-                    ValidationResult(false, "Gemini API Key সাধারণত 'AIza' দিয়ে শুরু হয় এবং অন্তত ৩০ অক্ষরের হয়।")
+                    ValidationResult(false, "Invalid Gemini API key format. Keys must be at least 20 characters.")
                 }
             }
             ProviderType.GROQ -> {
-                if (trimmed.startsWith("gsk_") && trimmed.length >= 35) {
-                    ValidationResult(true, "ফরম্যাট সঠিক মনে হচ্ছে।")
+                if (trimmed.startsWith("gsk_") && trimmed.length >= 30) {
+                    ValidationResult(true, "Key format is valid.")
                 } else {
-                    ValidationResult(false, "Groq API Key সাধারণত 'gsk_' দিয়ে শুরু হয়।")
+                    ValidationResult(false, "Groq API keys typically start with 'gsk_'.")
                 }
             }
             ProviderType.OPENROUTER -> {
-                if (trimmed.startsWith("sk-or-") && trimmed.length >= 30) {
-                    ValidationResult(true, "ফরম্যাট সঠিক মনে হচ্ছে।")
+                if (trimmed.startsWith("sk-or-") && trimmed.length >= 25) {
+                    ValidationResult(true, "Key format is valid.")
                 } else {
-                    ValidationResult(false, "OpenRouter API Key সাধারণত 'sk-or-' দিয়ে শুরু হয়।")
+                    ValidationResult(false, "OpenRouter API keys typically start with 'sk-or-'.")
                 }
             }
         }
@@ -44,8 +44,8 @@ object KeyValidator {
 
     fun redactSecrets(input: String): String {
         return input
-            .replace(Regex("AIza[0-9A-Za-z\\-_]{20,}"), "AIza***REDACTED***")
-            .replace(Regex("gsk_[0-9A-Za-z]{20,}"), "gsk_***REDACTED***")
-            .replace(Regex("sk-or-[0-9A-Za-z\\-_]{20,}"), "sk-or-***REDACTED***")
+            .replace(Regex("AIza[0-9A-Za-z\\-_]{16,}"), "AIza***REDACTED***")
+            .replace(Regex("gsk_[0-9A-Za-z]{16,}"), "gsk_***REDACTED***")
+            .replace(Regex("sk-or-[0-9A-Za-z\\-_]{16,}"), "sk-or-***REDACTED***")
     }
 }

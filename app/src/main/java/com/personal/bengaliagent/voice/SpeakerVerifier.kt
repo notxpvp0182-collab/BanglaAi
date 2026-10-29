@@ -1,19 +1,9 @@
 package com.personal.bengaliagent.voice
 
 import kotlin.math.cos
-import kotlin.math.ln
 import kotlin.math.PI
 import kotlin.math.sqrt
 
-/**
- * Local, on-device acoustic speaker feature extractor & cosine similarity matcher.
- *
- * IMPORTANT SECURITY REALITY:
- * This is a lightweight acoustic preference signal (16-D spectral/prosodic embedding)
- * to help pause automation when an obviously different voice speaks.
- * It is NOT a cryptographic or biometric lock and MUST NEVER authorize sensitive actions.
- * Raw PCM audio is zeroed out immediately after computing the 16 floats.
- */
 object SpeakerVerifier {
 
     const val EMBEDDING_DIM = 16
@@ -33,10 +23,6 @@ object SpeakerVerifier {
         val warningMessageBn: String?
     )
 
-    /**
-     * Extracts a normalized 16-element float embedding from 16kHz 16-bit mono PCM samples.
-     * Clears [pcmSamples] in-place if [zeroOutBuffer] is true.
-     */
     fun extractEmbedding(
         pcmSamples: ShortArray,
         sampleRate: Int = 16000,
@@ -103,7 +89,6 @@ object SpeakerVerifier {
                         pitchFrames++
                     }
 
-                    // Compute 12 spectral sub-band energies across vocal formants (bins 3..60)
                     var weightedFreqSum = 0.0
                     var magSum = 1e-9
                     val frameBandPower = DoubleArray(numBands)
@@ -127,7 +112,6 @@ object SpeakerVerifier {
                         weightedFreqSum += (b + 1) * subBandSum
                         magSum += subBandSum
                     }
-                    // Normalize band distribution per frame so spectral shape dominates
                     for (b in 0 until numBands) {
                         bandEnergies[b] += (frameBandPower[b] / magSum) * 4.0
                     }
@@ -180,7 +164,7 @@ object SpeakerVerifier {
             return VerificationOutcome(
                 MatchStatus.UNCERTAIN,
                 0f,
-                "আমি তোমার কণ্ঠ নিশ্চিত করতে পারছি না—দয়া করে নিজে নিশ্চিত করো।"
+                "Could not verify your voice—please confirm manually."
             )
         }
         val sim = cosineSimilarity(enrolledEmbedding, candidateEmbedding)
@@ -193,12 +177,12 @@ object SpeakerVerifier {
             sim >= UNCERTAIN_LOWER_BOUND -> VerificationOutcome(
                 MatchStatus.UNCERTAIN,
                 sim,
-                "আমি তোমার কণ্ঠ নিশ্চিত করতে পারছি না—দয়া করে নিজে নিশ্চিত করো।"
+                "Could not verify your voice—please confirm manually."
             )
             else -> VerificationOutcome(
                 MatchStatus.DIFFERENT_SPEAKER,
                 sim,
-                "আমি তোমার কণ্ঠ নিশ্চিত করতে পারছি না—দয়া করে নিজে নিশ্চিত করো। (ভিন্ন কণ্ঠ শনাক্ত হয়েছে, সংবেদনশীল কাজ স্থগিত রাখা হয়েছে)"
+                "Could not verify your voice—please confirm manually. (Different speaker detected; sensitive actions paused)"
             )
         }
     }

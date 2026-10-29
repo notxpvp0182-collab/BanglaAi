@@ -18,15 +18,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-/**
- * Handles Bengali (bn-BD) and English STT + TTS, push-to-talk vs explicit continuous listening,
- * immediate mute/stop resource release, and short PCM capture for speaker enrollment/verification.
- */
 class VoiceManager(
     private val context: Context,
     private val scope: CoroutineScope,
     private val onTranscriptReady: (text: String) -> Unit,
-    private val onStatusUpdate: (statusBn: String) -> Unit,
+    private val onStatusUpdate: (statusEn: String) -> Unit,
     private val onListeningStateChanged: (isListening: Boolean) -> Unit
 ) : TextToSpeech.OnInitListener {
 
@@ -56,9 +52,9 @@ class VoiceManager(
     }
 
     fun getTtsStatusDescription(): String {
-        val engine = tts?.defaultEngine ?: "অজানা (Unknown)"
-        val activeVoice = tts?.voice?.name ?: "ডিফল্ট ভয়েস"
-        return "TTS ইঞ্জিন: $engine | সক্রিয় কণ্ঠ: $activeVoice"
+        val engine = tts?.defaultEngine ?: "System Default"
+        val activeVoice = tts?.voice?.name ?: "Default Voice"
+        return "TTS Engine: $engine | Active Voice: $activeVoice"
     }
 
     fun getAvailableVoicesForBengaliAndEnglish(): List<String> {
@@ -101,7 +97,7 @@ class VoiceManager(
         stopSpeaking()
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onStatusUpdate(
-                "এই ফোনে সিস্টেম SpeechRecognizer নেই। 'ভয়েস সেটিংস' থেকে ক্লাউড STT ব্যবহার করতে পারেন।"
+                "System SpeechRecognizer is unavailable on this device. You can use text input or configure Cloud STT in Voice Settings."
             )
             onListeningStateChanged(false)
             return
@@ -128,9 +124,6 @@ class VoiceManager(
         speechRecognizer?.startListening(intent)
     }
 
-    /**
-     * Immediately stops microphone capture. Does not merely hide an icon.
-     */
     fun stopListeningImmediately() {
         continuousModeEnabled = false
         isCurrentlyListening = false
@@ -144,10 +137,6 @@ class VoiceManager(
         onListeningStateChanged(false)
     }
 
-    /**
-     * Records a short 2.5-second 16kHz mono PCM clip on-device for speaker enrollment/testing
-     * or Cloud STT fallback, then invokes [onSamplesCaptured].
-     */
     @SuppressLint("MissingPermission")
     fun captureShortPcmSample(
         durationMs: Int = 2500,
@@ -212,7 +201,7 @@ class VoiceManager(
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
-            onStatusUpdate("শুনছি ($currentLanguageTag)... কথা বলুন।")
+            onStatusUpdate("Listening ($currentLanguageTag)... Speak now.")
         }
 
         override fun onBeginningOfSpeech() {}
@@ -227,15 +216,15 @@ class VoiceManager(
         override fun onError(error: Int) {
             isCurrentlyListening = false
             onListeningStateChanged(false)
-            val msgBn = when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH -> "কোনো কথা বোঝা যায়নি। আবার চেষ্টা করুন।"
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "কোনো শব্দ পাওয়া যায়নি (Timeout)।"
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "মাইক্রোফোন অনুমতি নেই।"
+            val msg = when (error) {
+                SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized. Please try speaking again."
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timed out. Tap the microphone to try again."
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required for voice input."
                 SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                    "ভয়েস রিকগনিশন নেটওয়ার্ক ত্রুটি।"
-                else -> "ভয়েস রিকগনিশন ত্রুটি (কোড: $error)। বাংলা প্যাক না থাকলে ক্লাউড STT ব্যবহার করুন।"
+                    "Network error during speech recognition."
+                else -> "Speech recognition error (Code: $error)."
             }
-            onStatusUpdate(msgBn)
+            onStatusUpdate(msg)
         }
 
         override fun onResults(results: Bundle?) {

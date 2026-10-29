@@ -98,13 +98,11 @@ class Milestone3And4UnitTest {
     @Test
     fun `speaker verifier extracts 16D embedding, zeros raw buffer, and distinguishes voices`() {
         val sampleRate = 16000
-        // Synthetic Speaker A (fundamental ~130Hz + harmonics)
         val pcmSpeakerA = ShortArray(sampleRate) { i ->
             val t = i.toDouble() / sampleRate
             val wave = 0.5 * sin(2 * PI * 130 * t) + 0.3 * sin(2 * PI * 260 * t)
             (wave * 18000).toInt().toShort()
         }
-        // Synthetic Speaker B (fundamental ~290Hz + higher formant)
         val pcmSpeakerB = ShortArray(sampleRate) { i ->
             val t = i.toDouble() / sampleRate
             val wave = 0.5 * sin(2 * PI * 290 * t) + 0.4 * sin(2 * PI * 1450 * t)
@@ -113,7 +111,6 @@ class Milestone3And4UnitTest {
 
         val embA = SpeakerVerifier.extractEmbedding(pcmSpeakerA, sampleRate, zeroOutBuffer = true)
         assertNotNull(embA)
-        // Verify raw PCM buffer was zeroed out for privacy
         assertTrue(pcmSpeakerA.all { it == 0.toShort() })
 
         val embB = SpeakerVerifier.extractEmbedding(pcmSpeakerB, sampleRate, zeroOutBuffer = true)
@@ -125,16 +122,15 @@ class Milestone3And4UnitTest {
         val diffOutcome = SpeakerVerifier.verifyAgainstEnrolled(embA, embB)
         assertTrue(diffOutcome.status != SpeakerVerifier.MatchStatus.MATCHED)
         assertTrue(
-            diffOutcome.warningMessageBn?.contains("আমি তোমার কণ্ঠ নিশ্চিত করতে পারছি না") == true
+            diffOutcome.warningMessageBn?.contains("Could not verify your voice") == true
         )
     }
 
     @Test
-    fun `memory repository extracts explicit Bengali facts, redacts secrets, and supports edit and delete`() = runTest {
+    fun `memory repository extracts explicit facts, redacts secrets, and supports edit and delete`() = runTest {
         val dao = FakeInMemoryAgentDao()
         val repo = MemoryRepository(dao)
 
-        // Save user message with explicit Bengali memory trigger
         repo.saveChatMessage(
             ChatMessage(
                 id = 1L,
@@ -147,28 +143,24 @@ class Milestone3And4UnitTest {
         assertEquals(1, facts.size)
         assertTrue(facts[0].details.contains("সবুজ"))
 
-        // Verify password/OTP redaction before storage
         val sanitized = repo.sanitizeForStorage("আমার পাসওয়ার্ড হলো secret12345 এবং key AIzaSyA123456789012345678901234567890")
         assertFalse(sanitized.contains("secret12345"))
         assertTrue(sanitized.contains("[REDACTED]"))
         assertTrue(sanitized.contains("***REDACTED***"))
 
-        // Edit fact
         val factId = facts[0].id
         repo.addOrUpdateFact(
             id = factId,
             category = "PREFERENCE",
-            title = "প্রিয় রঙ",
-            details = "আমার প্রিয় রঙ নীল"
+            title = "Favorite Color",
+            details = "My favorite color is blue"
         )
-        val updated = repo.searchFacts("নীল")
+        val updated = repo.searchFacts("blue")
         assertEquals(1, updated.size)
 
-        // Build context for recall
-        val contextSnippet = repo.buildRelevantMemoryContext("আমার প্রিয় রঙ কী?")
-        assertTrue(contextSnippet.contains("নীল"))
+        val contextSnippet = repo.buildRelevantMemoryContext("favorite color")
+        assertTrue(contextSnippet.contains("blue"))
 
-        // Delete fact
         repo.deleteFact(factId)
         assertTrue(repo.getAllFacts().isEmpty())
     }

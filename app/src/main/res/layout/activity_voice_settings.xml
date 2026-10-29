@@ -3,34 +3,50 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_black"
-    android:padding="14dp">
+    android:padding="@dimen/screen_padding">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="বাংলা ভয়েস ও কণ্ঠ শনাক্তকরণ সেটিংস"
-            android:textColor="@color/accent_green"
-            android:textSize="19sp"
-            android:textStyle="bold" />
+            android:background="@drawable/bg_header_gradient"
+            android:orientation="vertical"
+            android:padding="@dimen/card_padding">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Voice &amp; Speaker Settings"
+                android:textColor="@color/text_primary"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Configure Bengali &amp; English speech recognition, Text-to-Speech voices, and on-device speaker preference."
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <!-- Language & TTS Card -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="@dimen/card_padding">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="১. কথোপকথনের ভাষা ও কণ্ঠ (STT &amp; TTS)"
+                android:text="1. Conversation Language &amp; TTS Voice"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
 
@@ -44,15 +60,15 @@
                 <RadioButton
                     android:id="@+id/rbBengali"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="48dp"
                     android:checked="true"
-                    android:text="বাংলা (bn-BD)"
+                    android:text="Bengali (bn-BD)"
                     android:textColor="@color/text_primary" />
 
                 <RadioButton
                     android:id="@+id/rbEnglish"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="48dp"
                     android:layout_marginStart="16dp"
                     android:text="English (en-US)"
                     android:textColor="@color/text_primary" />
@@ -61,9 +77,9 @@
             <CheckBox
                 android:id="@+id/cbAutoSpeak"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="48dp"
                 android:checked="true"
-                android:text="উত্তর স্বয়ংক্রিয়ভাবে পড়ে শোনাবে (Text-to-Speech)"
+                android:text="Read assistant replies aloud (Text-to-Speech)"
                 android:textColor="@color/text_primary" />
 
             <TextView
@@ -71,23 +87,23 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="TTS ইঞ্জিন লোড হচ্ছে..."
+                android:text="Initializing TTS engine..."
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
             <Spinner
                 android:id="@+id/spinnerVoices"
                 android:layout_width="match_parent"
-                android:layout_height="44dp"
+                android:layout_height="48dp"
                 android:layout_marginTop="6dp" />
 
             <Button
                 android:id="@+id/btnTestTts"
+                style="@style/Widget.BengaliAgent.Button.Secondary"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:layout_marginTop="4dp"
-                android:backgroundTint="@color/accent_blue"
-                android:text="কণ্ঠ পরীক্ষা করুন (Test Voice)" />
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:text="Test Active Voice" />
         </LinearLayout>
 
         <!-- Cloud STT Fallback Card -->
@@ -97,12 +113,12 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="@dimen/card_padding">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="২. ক্লাউড STT ফলব্যাক (Groq Whisper)"
+                android:text="2. Cloud STT Diagnostic"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
 
@@ -110,24 +126,24 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="যদি আপনার ফোনে সিস্টেম বাংলা ভয়েস টাইপিং না থাকে, তবে ৩ সেকেন্ডের অডিও ক্লিপ আপনার Groq API-এ পাঠিয়ে বাংলা টেক্সটে রূপান্তর করতে পারেন।"
+                android:text="Optional fallback for devices without built-in Bengali speech recognition."
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btnTestCloudStt"
+                style="@style/Widget.BengaliAgent.Button.Secondary"
                 android:layout_width="wrap_content"
-                android:layout_height="42dp"
+                android:layout_height="48dp"
                 android:layout_marginTop="6dp"
-                android:backgroundTint="@color/bg_surface"
-                android:text="ক্লাউড STT পরীক্ষা করুন (৩ সেকেন্ড বলুন)" />
+                android:text="Test 3-Second Audio Capture" />
 
             <TextView
                 android:id="@+id/tvCloudSttResult"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/accent_green"
+                android:textColor="@color/accent_cyan"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -138,13 +154,13 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="@dimen/card_padding">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="৩. ব্যক্তিগত কণ্ঠ শনাক্তকরণ (Speaker Preference)"
-                android:textColor="@color/accent_green"
+                android:text="3. On-Device Speaker Preference"
+                android:textColor="@color/text_primary"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -152,16 +168,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="নিরাপত্তা বিজ্ঞপ্তি: এটি শুধুমাত্র আপনার ফোনের ভেতরে (On-device) ১৬-সংখ্যার একটি গাণিতিক ভয়েস প্রোফাইল তৈরি করে; কোনো মূল অডিও রেকর্ডিং সংরক্ষণ করা হয় না। এটি ফোন আনলক বা সংবেদনশীল কাজের চূড়ান্ত প্রমাণ হিসেবে ব্যবহৃত হয় না।"
+                android:text="Security Note: Computes a compact 16-float acoustic embedding locally on-device and immediately zeroes out raw audio. Convenience signal only—never used for device unlock or authentication."
                 android:textColor="@color/accent_amber"
                 android:textSize="12sp" />
 
             <CheckBox
                 android:id="@+id/cbEnableSpeakerMatch"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="48dp"
                 android:layout_marginTop="6dp"
-                android:text="সক্রিয় সেশনে ভিন্ন কণ্ঠ সন্দেহ হলে সতর্ক করুন"
+                android:text="Warn if a different speaker is detected during sessions"
                 android:textColor="@color/text_primary" />
 
             <TextView
@@ -169,7 +185,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="কণ্ঠের অবস্থা: নিবন্ধিত নয়"
+                android:text="Voice Status: Not Enrolled"
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
@@ -181,43 +197,40 @@
 
                 <Button
                     android:id="@+id/btnEnrollVoice"
+                    style="@style/Widget.BengaliAgent.Button.Primary"
                     android:layout_width="0dp"
-                    android:layout_height="44dp"
+                    android:layout_height="48dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
-                    android:backgroundTint="@color/accent_green"
                     android:text="Enroll My Voice"
-                    android:textColor="@color/bg_black"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
+                    android:textSize="12sp" />
 
                 <Button
                     android:id="@+id/btnTestVoiceMatch"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="44dp"
+                    android:layout_height="48dp"
                     android:layout_weight="1"
-                    android:backgroundTint="@color/accent_blue"
                     android:text="Test Voice Match"
                     android:textSize="12sp" />
             </LinearLayout>
 
             <Button
                 android:id="@+id/btnForgetVoice"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="আমার কণ্ঠ মুছে ফেলুন (Forget My Voice)"
-                android:textColor="@color/accent_red" />
+                style="@style/Widget.BengaliAgent.Button.Destructive"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:text="Forget My Voice" />
         </LinearLayout>
 
         <Button
             android:id="@+id/btnCloseVoiceSettings"
+            style="@style/Widget.BengaliAgent.Button.Secondary"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="50dp"
             android:layout_marginTop="14dp"
-            android:backgroundTint="@color/bg_surface"
-            android:text="ফিরে যান" />
+            android:text="Back to Assistant" />
 
     </LinearLayout>
 </ScrollView>

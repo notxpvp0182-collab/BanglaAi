@@ -12,9 +12,11 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.File
 
 class Milestone1And2UnitTest {
 
@@ -32,22 +34,15 @@ class Milestone1And2UnitTest {
     }
 
     @Test
-    fun `key validator checks provider formats and redacts secrets`() {
+    fun `key validator checks non-empty Gemini format and redacts secrets`() {
         val validGemini = "AIzaSyA123456789012345678901234567890"
-        val invalidGemini = "short_key"
         assertTrue(KeyValidator.validateFormat(ProviderType.GEMINI, validGemini).isValidFormat)
-        assertFalse(KeyValidator.validateFormat(ProviderType.GEMINI, invalidGemini).isValidFormat)
+        assertFalse(KeyValidator.validateFormat(ProviderType.GEMINI, "").isValidFormat)
+        assertFalse(KeyValidator.validateFormat(ProviderType.GEMINI, "short").isValidFormat)
 
-        val validGroq = "gsk_123456789012345678901234567890123456"
-        assertTrue(KeyValidator.validateFormat(ProviderType.GROQ, validGroq).isValidFormat)
-
-        val validOpenRouter = "sk-or-v1-123456789012345678901234567890"
-        assertTrue(KeyValidator.validateFormat(ProviderType.OPENROUTER, validOpenRouter).isValidFormat)
-
-        val logLine = "Error with key $validGemini and $validGroq"
+        val logLine = "Error with key $validGemini"
         val redacted = KeyValidator.redactSecrets(logLine)
         assertFalse(redacted.contains(validGemini))
-        assertFalse(redacted.contains(validGroq))
         assertTrue(redacted.contains("***REDACTED***"))
     }
 
@@ -68,49 +63,135 @@ class Milestone1And2UnitTest {
     }
 
     @Test
-    fun `live model discovery parses OpenAI-compatible models and filters non-chat models`() = runTest {
-        val mockJson = """
+    fun `gemini automatic model discovery filters generateContent and prefers stable over preview`() = runTest {
+        val modelsJson = """
             {
-              "data": [
-                {"id": "llama-3.3-70b-versatile"},
-                {"id": "whisper-large-v3"},
-                {"id": "llama-3.1-8b-instant"}
+              "models": [
+                {
+                  "name": "models/text-embedding-004",
+                  "displayName": "Text Embedding 004",
+                  "supportedGenerationMethods": ["embedContent"]
+                },
+                {
+                  "name": "models/gemini-2.5-flash-preview-04-17",
+                  "displayName": "Gemini 2.5 Flash Preview",
+                  "supportedGenerationMethods": ["generateContent"]
+                },
+                {
+                  "name": "models/gemini-2.5-flash",
+                  "displayName": "Gemini 2.5 Flash",
+                  "supportedGenerationMethods": ["generateContent", "countTokens"],
+                  "inputTokenLimit": 1048576
+                }
               ]
             }
         """.trimIndent()
-        mockServer.enqueue(MockResponse().setResponseCode(200).setBody(mockJson))
 
-        val client = LlmProviderClient(
-            baseUrlOverride = mapOf(ProviderType.GROQ to mockServer.url("/v1").toString().removeSuffix("/"))
-        )
-        val validGroqKey = "gsk_123456789012345678901234567890123456"
-        val result = client.fetchAvailableModels(ProviderType.GROQ, validGroqKey)
-
-        assertTrue(result.isFromLiveApi)
-        assertEquals(listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant"), result.models)
-        assertEquals("llama-3.3-70b-versatile", result.recommendedModel)
-    }
-
-    @Test
-    fun `connection test distinguishes 401 invalid key from 200 success`() = runTest {
-        mockServer.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"Unauthorized"}"""))
+        // 1st request: GET /models -> returns list
+        mockServer.enqueue(MockResponse().setResponseCode(200).setBody(modelsJson))
+        // 2nd request: POST /models/gemini-2.5-flash:generateContent -> verifies candidate works
         mockServer.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"choices":[{"message":{"content":"OK"}}]}"""
+                """{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}"""
             )
         )
 
         val client = LlmProviderClient(
-            baseUrlOverride = mapOf(ProviderType.OPENROUTER to mockServer.url("/v1").toString().removeSuffix("/"))
+            baseUrlOverride = mapOf(
+                ProviderType.GEMINI to mockServer.url("/v1beta").toString().removeSuffix("/")
+            )
         )
-        val key = "sk-or-v1-123456789012345678901234567890"
+        val validKey = "AIzaSyA123456789012345678901234567890"
+        val result = client.discoverAndVerifyGemini(validKey)
 
-        val failedResult = client.testConnection(ProviderType.OPENROUTER, key, "google/gemini-2.5-flash")
-        assertFalse(failedResult.success)
-        assertEquals(ErrorCategory.INVALID_KEY, failedResult.errorCategory)
+        assertTrue(result.success)
+        assertEquals("gemini-2.5-flash", result.verifiedModel)
 
-        val okResult = client.testConnection(ProviderType.OPENROUTER, key, "google/gemini-2.5-flash")
-        assertTrue(okResult.success)
-        assertEquals(ErrorCategory.NONE, okResult.errorCategory)
+        // Verify x-goog-api-key header was used and key was not leaked in URL query
+        val req1 = mockServer.takeRequest()
+        assertEquals(validKey, req1.getHeader("x-goog-api-key"))
+        assertFalse(req1.path.orEmpty().contains(validKey))
+    }
+
+    @Test
+    fun `gemini discovery falls back to next eligible candidate if first model returns 404`() = runTest {
+        val modelsJson = """
+            {
+              "models": [
+                {
+                  "name": "models/gemini-2.5-flash",
+                  "supportedGenerationMethods": ["generateContent"]
+                },
+                {
+                  "name": "models/gemini-2.5-pro",
+                  "supportedGenerationMethods": ["generateContent"]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        mockServer.enqueue(MockResponse().setResponseCode(200).setBody(modelsJson))
+        // First candidate fails with 404
+        mockServer.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":"Not found"}"""))
+        // Second candidate succeeds
+        mockServer.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}"""
+            )
+        )
+
+        val client = LlmProviderClient(
+            baseUrlOverride = mapOf(
+                ProviderType.GEMINI to mockServer.url("/v1beta").toString().removeSuffix("/")
+            )
+        )
+        val result = client.discoverAndVerifyGemini("AIzaSyA123456789012345678901234567890")
+
+        assertTrue(result.success)
+        assertEquals("gemini-2.5-pro", result.verifiedModel)
+    }
+
+    @Test
+    fun `gemini discovery handles invalid key, quota limit, and no eligible models`() = runTest {
+        val client = LlmProviderClient(
+            baseUrlOverride = mapOf(
+                ProviderType.GEMINI to mockServer.url("/v1beta").toString().removeSuffix("/")
+            )
+        )
+        val key = "AIzaSyA123456789012345678901234567890"
+
+        // 1. 401 Invalid Key
+        mockServer.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"API_KEY_INVALID"}"""))
+        val invalidRes = client.discoverAndVerifyGemini(key)
+        assertFalse(invalidRes.success)
+        assertEquals(ErrorCategory.INVALID_KEY, invalidRes.errorCategory)
+        assertNull(invalidRes.verifiedModel)
+
+        // 2. 429 Quota Exceeded
+        mockServer.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":"Quota exceeded"}"""))
+        val quotaRes = client.discoverAndVerifyGemini(key)
+        assertFalse(quotaRes.success)
+        assertEquals(ErrorCategory.QUOTA_OR_RATE_LIMIT, quotaRes.errorCategory)
+
+        // 3. No eligible text-generation models
+        mockServer.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"models":[{"name":"models/embedding-001","supportedGenerationMethods":["embedContent"]}]}"""
+            )
+        )
+        val emptyRes = client.discoverAndVerifyGemini(key)
+        assertFalse(emptyRes.success)
+        assertEquals(ErrorCategory.NO_ELIGIBLE_MODELS, emptyRes.errorCategory)
+    }
+
+    @Test
+    fun `provider settings layout contains English labels and no manual model selector`() {
+        val layoutFile = File("src/main/res/layout/activity_provider_settings.xml")
+        if (layoutFile.exists()) {
+            val xml = layoutFile.readText()
+            assertFalse("Manual model Spinner must not exist in AI Connection screen", xml.contains("<Spinner"))
+            assertTrue(xml.contains("btnConnectGemini"))
+            assertTrue(xml.contains("etGeminiKey"))
+        }
     }
 }

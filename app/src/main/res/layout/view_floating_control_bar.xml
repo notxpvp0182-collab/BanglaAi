@@ -6,63 +6,64 @@
     android:elevation="6dp"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingHorizontal="8dp"
-    android:paddingVertical="4dp">
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="6dp">
 
     <TextView
         android:id="@+id/tvOverlayStatusDot"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="6dp"
-        android:text="● এআই সক্রিয়"
+        android:layout_marginEnd="8dp"
+        android:text="● Agent Active"
         android:textColor="@color/accent_green"
         android:textSize="11sp"
         android:textStyle="bold" />
 
     <Button
         android:id="@+id/btnOverlayMute"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        android:layout_width="42dp"
-        android:layout_height="32dp"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="48dp"
+        android:layout_height="36dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"
         android:minWidth="0dp"
         android:padding="2dp"
-        android:text="🎤"
-        android:textSize="12sp" />
+        android:text="Mic"
+        android:textColor="@color/text_primary"
+        android:textSize="11sp" />
 
     <Button
         android:id="@+id/btnOverlayPause"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        android:layout_width="48dp"
-        android:layout_height="32dp"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="52dp"
+        android:layout_height="36dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"
         android:minWidth="0dp"
         android:padding="2dp"
-        android:text="বিরতি"
+        android:text="Pause"
         android:textColor="@color/accent_amber"
         android:textSize="11sp" />
 
     <Button
         android:id="@+id/btnOverlayStop"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
+        style="@style/Widget.Material3.Button.TextButton"
         android:layout_width="48dp"
-        android:layout_height="32dp"
+        android:layout_height="36dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"
         android:minWidth="0dp"
         android:padding="2dp"
-        android:text="থামুন"
+        android:text="Stop"
         android:textColor="@color/accent_red"
         android:textSize="11sp"
         android:textStyle="bold" />
 
     <Button
         android:id="@+id/btnOverlayDisable"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
+        style="@style/Widget.Material3.Button.TextButton"
         android:layout_width="36dp"
-        android:layout_height="32dp"
+        android:layout_height="36dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"
         android:minWidth="0dp"

@@ -8,12 +8,6 @@ import com.personal.bengaliagent.service.AgentAccessibilityService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
-/**
- * Executes validated [PlannedAction]s step-by-step with:
- * - User confirmation callback for SENSITIVE / DESTRUCTIVE actions
- * - Post-action UI state re-observation and honest verification
- * - Immediate cancellation support
- */
 class ActionExecutor(
     private val context: Context,
     private val onConfirmSensitiveAction: suspend (PlannedAction) -> Boolean,
@@ -33,7 +27,7 @@ class ActionExecutor(
                         action = action,
                         executed = false,
                         verifiedSuccess = false,
-                        observationNoteBn = "ব্যবহারকারী কাজটি বাতিল করেছেন।"
+                        observationNoteBn = "Task cancelled by user."
                     )
                 )
                 break
@@ -51,7 +45,6 @@ class ActionExecutor(
                 break
             }
 
-            // Require explicit user confirmation for SENSITIVE or DESTRUCTIVE steps
             if (action.riskLevel == RiskLevel.SENSITIVE || action.riskLevel == RiskLevel.DESTRUCTIVE) {
                 val approved = onConfirmSensitiveAction(action)
                 if (!approved) {
@@ -60,20 +53,19 @@ class ActionExecutor(
                             action = action,
                             executed = false,
                             verifiedSuccess = false,
-                            observationNoteBn = "ব্যবহারকারী সংবেদনশীল ধাপটি অনুমোদন করেননি (${action.tool.name})।"
+                            observationNoteBn = "User declined sensitive action (${action.tool.name})."
                         )
                     )
                     break
                 }
             }
 
-            onStepProgress("ধাপ ${idx + 1}: ${action.tool.name} (${action.targetLabel.ifBlank { action.packageNameOrAppName }})")
+            onStepProgress("Step ${idx + 1}: ${action.tool.name} (${action.targetLabel.ifBlank { action.packageNameOrAppName }})")
 
             try {
                 val stepResult = executeSingleStep(action)
                 results.add(stepResult)
                 if (!stepResult.verifiedSuccess) {
-                    // Stop blind execution if a step fails verification
                     break
                 }
             } catch (ce: CancellationException) {
@@ -84,7 +76,7 @@ class ActionExecutor(
                         action = action,
                         executed = false,
                         verifiedSuccess = false,
-                        observationNoteBn = "ধাপটি সম্পন্ন করতে ত্রুটি হয়েছে: ${e.message}"
+                        observationNoteBn = "Step failed with error: ${e.message}"
                     )
                 )
                 break
@@ -105,7 +97,7 @@ class ActionExecutor(
                         action = action,
                         executed = false,
                         verifiedSuccess = false,
-                        observationNoteBn = "'$query' নামের কোনো ইনস্টল করা অ্যাপ খুঁজে পাওয়া যায়নি।"
+                        observationNoteBn = "Could not find an installed app matching '$query'."
                     )
                 }
                 delay(1200)
@@ -116,17 +108,15 @@ class ActionExecutor(
                     executed = true,
                     verifiedSuccess = true,
                     observationNoteBn = if (verified) {
-                        "'$query' অ্যাপটি খোলা হয়েছে এবং স্ক্রিনে যাচাই করা হয়েছে (${postObs?.packageName})।"
+                        "Opened '$query' and verified active package (${postObs?.packageName})."
                     } else {
-                        "'$query' অ্যাপটি খোলার নির্দেশ পাঠানো হয়েছে।"
+                        "Sent launch intent for '$query'."
                     }
                 )
             }
 
             ToolType.READ_SCREEN -> {
-                if (acc == null) {
-                    return missingAccessibilityResult(action)
-                }
+                if (acc == null) return missingAccessibilityResult(action)
                 val obs = acc.observeCurrentScreen()
                 return if (obs != null && obs.elements.isNotEmpty()) {
                     val sampleLabels = obs.elements.take(8).joinToString(", ") { it.displayLabel() }
@@ -134,14 +124,14 @@ class ActionExecutor(
                         action = action,
                         executed = true,
                         verifiedSuccess = true,
-                        observationNoteBn = "স্ক্রিন পড়া হয়েছে (${obs.packageName}): $sampleLabels"
+                        observationNoteBn = "Screen inspected (${obs.packageName}): $sampleLabels"
                     )
                 } else {
                     StepExecutionResult(
                         action = action,
                         executed = true,
                         verifiedSuccess = false,
-                        observationNoteBn = "স্ক্রিনে কোনো পঠনযোগ্য ইউআই এলিমেন্ট পাওয়া যায়নি।"
+                        observationNoteBn = "No readable UI elements found on the current screen."
                     )
                 }
             }
@@ -154,7 +144,7 @@ class ActionExecutor(
                         action = action,
                         executed = false,
                         verifiedSuccess = false,
-                        observationNoteBn = "সুরক্ষিত সিস্টেম বা পারমিশন স্ক্রিনে স্বয়ংক্রিয় ট্যাপ করা নিষিদ্ধ।"
+                        observationNoteBn = "Automated tapping is blocked on protected system or permission screens."
                     )
                 }
                 val tapped = acc.tapElementByLabel(action.targetLabel)
@@ -163,7 +153,7 @@ class ActionExecutor(
                         action = action,
                         executed = false,
                         verifiedSuccess = false,
-                        observationNoteBn = "'${action.targetLabel}' বাটনটি বর্তমান স্ক্রিনে পাওয়া যায়নি।"
+                        observationNoteBn = "Element '${action.targetLabel}' was not found on the current screen."
                     )
                 }
                 delay(700)
@@ -172,7 +162,7 @@ class ActionExecutor(
                     action = action,
                     executed = true,
                     verifiedSuccess = true,
-                    observationNoteBn = "'${action.targetLabel}'-এ ট্যাপ সম্পন্ন হয়েছে (বর্তমান প্যাকেজ: ${afterObs?.packageName ?: "অজানা"})।"
+                    observationNoteBn = "Tapped '${action.targetLabel}' (Active package: ${afterObs?.packageName ?: "unknown"})."
                 )
             }
 
@@ -185,9 +175,9 @@ class ActionExecutor(
                     executed = ok,
                     verifiedSuccess = ok,
                     observationNoteBn = if (ok) {
-                        "স্থানাঙ্ক (${action.x}, ${action.y})-এ ট্যাপ সম্পন্ন হয়েছে।"
+                        "Tapped coordinates (${action.x}, ${action.y})."
                     } else {
-                        "স্থানাঙ্কে ট্যাপ করা সম্ভব হয়নি।"
+                        "Coordinate tap failed."
                     }
                 )
             }
@@ -204,7 +194,7 @@ class ActionExecutor(
                     action = action,
                     executed = ok,
                     verifiedSuccess = ok,
-                    observationNoteBn = if (ok) "লং-প্রেস সম্পন্ন হয়েছে।" else "লং-প্রেস ব্যর্থ হয়েছে।"
+                    observationNoteBn = if (ok) "Long-press completed." else "Long-press failed."
                 )
             }
 
@@ -228,9 +218,9 @@ class ActionExecutor(
                     executed = ok,
                     verifiedSuccess = ok,
                     observationNoteBn = if (ok) {
-                        "'${action.targetLabel}' ক্লিপবোর্ডে কপি করা হয়েছে।"
+                        "Copied '${action.targetLabel}' to clipboard."
                     } else {
-                        "টেক্সটটি কপি করা যায়নি।"
+                        "Could not copy the requested text."
                     }
                 )
             }
@@ -244,7 +234,7 @@ class ActionExecutor(
                     action = action,
                     executed = ok,
                     verifiedSuccess = ok,
-                    observationNoteBn = if (ok) "নিচে স্ক্রল করা হয়েছে।" else "স্ক্রল করা যায়নি।"
+                    observationNoteBn = if (ok) "Scrolled down." else "Scroll down failed."
                 )
             }
 
@@ -257,7 +247,7 @@ class ActionExecutor(
                     action = action,
                     executed = ok,
                     verifiedSuccess = ok,
-                    observationNoteBn = if (ok) "উপরে স্ক্রল করা হয়েছে।" else "স্ক্রল করা যায়নি।"
+                    observationNoteBn = if (ok) "Scrolled up." else "Scroll up failed."
                 )
             }
 
@@ -269,7 +259,7 @@ class ActionExecutor(
                     action = action,
                     executed = ok,
                     verifiedSuccess = ok,
-                    observationNoteBn = if (ok) "সোয়াইপ সম্পন্ন হয়েছে।" else "সোয়াইপ ব্যর্থ হয়েছে।"
+                    observationNoteBn = if (ok) "Swipe gesture completed." else "Swipe gesture failed."
                 )
             }
 
@@ -281,7 +271,7 @@ class ActionExecutor(
                     action = action,
                     executed = ok,
                     verifiedSuccess = ok,
-                    observationNoteBn = if (ok) "ব্যাক (Back) বাটন চাপা হয়েছে।" else "ব্যাক বাটন কাজ করেনি।"
+                    observationNoteBn = if (ok) "Pressed Back." else "Back action failed."
                 )
             }
 
@@ -293,7 +283,7 @@ class ActionExecutor(
                     action = action,
                     executed = ok,
                     verifiedSuccess = ok,
-                    observationNoteBn = if (ok) "হোম (Home) স্ক্রিনে যাওয়া হয়েছে।" else "হোম বাটন কাজ করেনি।"
+                    observationNoteBn = if (ok) "Navigated to Home screen." else "Home action failed."
                 )
             }
 
@@ -305,7 +295,7 @@ class ActionExecutor(
                     action = action,
                     executed = ok,
                     verifiedSuccess = ok,
-                    observationNoteBn = if (ok) "রিসেন্ট অ্যাপস খোলা হয়েছে।" else "রিসেন্ট অ্যাপস খোলা যায়নি।"
+                    observationNoteBn = if (ok) "Opened Recent Apps." else "Recent Apps action failed."
                 )
             }
 
@@ -316,7 +306,7 @@ class ActionExecutor(
                     action = action,
                     executed = true,
                     verifiedSuccess = true,
-                    observationNoteBn = "১.৫ সেকেন্ড অপেক্ষা ও স্ক্রিন পর্যবেক্ষণ সম্পন্ন (${obs?.packageName ?: "অজানা"})।"
+                    observationNoteBn = "Waited 1.5s and observed screen (${obs?.packageName ?: "unknown"})."
                 )
             }
 
@@ -336,7 +326,7 @@ class ActionExecutor(
             action = action,
             executed = false,
             verifiedSuccess = false,
-            observationNoteBn = "অ্যাক্সেসিবিলিটি সার্ভিস চালু নেই। 'অনুমতি ড্যাশবোর্ড' থেকে সিস্টেম সেটিংস খুলে বাংলা এআই অ্যাক্সেসিবিলিটি সার্ভিসটি চালু করুন।"
+            observationNoteBn = "Accessibility Service is not enabled. Open Permissions Setup to enable Bengali AI Accessibility Assistant in Android Settings."
         )
     }
 
@@ -345,7 +335,6 @@ class ActionExecutor(
         if (clean.isEmpty()) return false
         val pm = context.packageManager
 
-        // 1. Direct package launch
         val directIntent = pm.getLaunchIntentForPackage(clean)
         if (directIntent != null) {
             directIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -353,7 +342,6 @@ class ActionExecutor(
             return true
         }
 
-        // 2. Search installed launcher activities by label
         val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }

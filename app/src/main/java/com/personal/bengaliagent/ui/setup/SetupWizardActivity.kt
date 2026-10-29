@@ -87,9 +87,9 @@ class SetupWizardActivity : AppCompatActivity() {
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
         binding.tvMicStatus.text = if (micGranted) {
-            "১. মাইক্রোফোন অনুমতি: চালু আছে (Granted)"
+            "1. Microphone Permission: Granted"
         } else {
-            "১. মাইক্রোফোন অনুমতি: দেওয়া হয়নি (ঐচ্ছিক)"
+            "1. Microphone Permission: Not Granted (Optional)"
         }
 
         val notifGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -101,23 +101,23 @@ class SetupWizardActivity : AppCompatActivity() {
             true
         }
         binding.tvNotifStatus.text = if (notifGranted) {
-            "২. নোটিফিকেশন অনুমতি: চালু আছে (Granted)"
+            "2. Notification Permission: Granted"
         } else {
-            "২. নোটিফিকেশন অনুমতি: দেওয়া হয়নি (ঐচ্ছিক)"
+            "2. Notification Permission: Not Granted (Optional)"
         }
 
         val accEnabled = AgentAccessibilityService.isServiceEnabled()
         binding.tvAccessibilityStatus.text = if (accEnabled) {
-            "৩. অ্যাক্সেসিবিলিটি সার্ভিস: সক্রিয় (Active)"
+            "3. Accessibility Service: Active"
         } else {
-            "৩. অ্যাক্সেসিবিলিটি সার্ভিস: বন্ধ (ঐচ্ছিক)"
+            "3. Accessibility Service: Disabled (Optional)"
         }
 
         val overlayGranted = Settings.canDrawOverlays(this)
         binding.tvOverlayStatus.text = if (overlayGranted) {
-            "৪. ওভারলে অনুমতি: চালু আছে (Granted)"
+            "4. Overlay Permission: Granted"
         } else {
-            "৪. ওভারলে অনুমতি: বন্ধ (ঐচ্ছিক)"
+            "4. Overlay Permission: Disabled (Optional)"
         }
     }
 }

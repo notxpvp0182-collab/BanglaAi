@@ -32,30 +32,28 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[KEY_PREFERRED_PROVIDER] = provider.id }
     }
 
-    suspend fun getFailoverOrder(): List<ProviderType> {
+    suspend fun getVerifiedModel(provider: ProviderType): String? {
         val prefs = context.dataStore.data.first()
-        val raw = prefs[KEY_FAILOVER_ORDER] ?: "gemini,groq,openrouter"
-        val parsed = raw.split(",")
-            .mapNotNull { id -> ProviderType.entries.firstOrNull { it.id == id.trim() } }
-            .distinct()
-        return if (parsed.isEmpty()) ProviderType.entries.toList() else parsed
+        return prefs[modelKey(provider)]?.takeIf { it.isNotBlank() }
     }
 
-    suspend fun setFailoverOrder(order: List<ProviderType>) {
+    suspend fun setVerifiedModel(provider: ProviderType, modelName: String?) {
         context.dataStore.edit {
-            it[KEY_FAILOVER_ORDER] = order.joinToString(",") { p -> p.id }
+            if (modelName.isNullOrBlank()) {
+                it.remove(modelKey(provider))
+            } else {
+                it[modelKey(provider)] = modelName.trim()
+            }
         }
     }
 
-    suspend fun getSelectedModel(provider: ProviderType): String {
+    suspend fun getLastConnectionMessage(): String {
         val prefs = context.dataStore.data.first()
-        return prefs[modelKey(provider)] ?: provider.defaultRecommendedModel
+        return prefs[KEY_LAST_CONNECTION_MSG] ?: "Not connected"
     }
 
-    suspend fun setSelectedModel(provider: ProviderType, modelName: String) {
-        context.dataStore.edit {
-            it[modelKey(provider)] = modelName.trim()
-        }
+    suspend fun setLastConnectionMessage(msg: String) {
+        context.dataStore.edit { it[KEY_LAST_CONNECTION_MSG] = msg }
     }
 
     suspend fun isCloudSharingConsented(): Boolean {
@@ -67,7 +65,6 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[KEY_CLOUD_CONSENT] = consented }
     }
 
-    // --- Milestone 3: Voice & Speaker Preferences ---
     suspend fun getVoiceLanguageTag(): String {
         val prefs = context.dataStore.data.first()
         return prefs[KEY_VOICE_LANG] ?: "bn-BD"
@@ -110,7 +107,6 @@ class AppPreferences(private val context: Context) {
         }
     }
 
-    // --- Milestone 4: Memory Retention ---
     suspend fun getMemoryRetentionDays(): Int {
         val prefs = context.dataStore.data.first()
         return prefs[KEY_MEMORY_RETENTION_DAYS] ?: 90
@@ -120,12 +116,12 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[KEY_MEMORY_RETENTION_DAYS] = days }
     }
 
-    private fun modelKey(provider: ProviderType) = stringPreferencesKey("selected_model_${provider.id}")
+    private fun modelKey(provider: ProviderType) = stringPreferencesKey("verified_model_${provider.id}")
 
     companion object {
         private val KEY_SETUP_COMPLETED = booleanPreferencesKey("setup_completed")
         private val KEY_PREFERRED_PROVIDER = stringPreferencesKey("preferred_provider")
-        private val KEY_FAILOVER_ORDER = stringPreferencesKey("failover_order")
+        private val KEY_LAST_CONNECTION_MSG = stringPreferencesKey("last_connection_msg")
         private val KEY_CLOUD_CONSENT = booleanPreferencesKey("cloud_consent")
         private val KEY_VOICE_LANG = stringPreferencesKey("voice_lang_tag")
         private val KEY_TTS_AUTO_SPEAK = booleanPreferencesKey("tts_auto_speak")

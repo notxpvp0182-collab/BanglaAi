@@ -1,17 +1,12 @@
 package com.personal.bengaliagent.coding
 
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * Manages SAF project file creation and explicit user-approved Termux command execution.
- * Never executes arbitrary shell commands silently or without validation.
- */
 object CodingWorkspaceManager {
 
     private val destructiveShellPatterns = listOf(
@@ -34,20 +29,17 @@ object CodingWorkspaceManager {
             CommandSafetyCheck(
                 command = trimmed,
                 isDestructiveOrHighRisk = true,
-                warningBn = "উচ্চ ঝুঁকিপূর্ণ শেল কমান্ড শনাক্ত হয়েছে! এটি ফাইল মুছে ফেলতে বা সিস্টেমের ক্ষতি করতে পারে। ভালোভাবে যাচাই না করে অনুমোদন করবেন না।"
+                warningBn = "High-risk shell command detected! This command may delete files or modify system permissions. Verify carefully before approving."
             )
         } else {
             CommandSafetyCheck(
                 command = trimmed,
                 isDestructiveOrHighRisk = false,
-                warningBn = "এই কমান্ডটি Termux-এ চালানোর আগে অনুগ্রহ করে নিচে দেখে নিশ্চিত করুন।"
+                warningBn = "Please review the exact command below before copying it to Termux."
             )
         }
     }
 
-    /**
-     * Creates a source file inside a user-selected SAF directory tree.
-     */
     suspend fun writeSourceFileToSafTree(
         context: Context,
         treeUri: Uri,
@@ -79,9 +71,6 @@ object CodingWorkspaceManager {
         }
     }
 
-    /**
-     * Opens Termux so the user can run the approved command visibly.
-     */
     fun openTermuxApp(context: Context): Boolean {
         val intent = context.packageManager.getLaunchIntentForPackage("com.termux") ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

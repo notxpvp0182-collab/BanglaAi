@@ -48,7 +48,7 @@ class MediaVideoStudioActivity : AppCompatActivity() {
         binding.btnPlayExternal.setOnClickListener {
             val uri = selectedVideoUri
             if (uri == null) {
-                Toast.makeText(this, "প্রথমে একটি ভিডিও নির্বাচন করুন", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Please select a video first.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             val viewIntent = Intent(Intent.ACTION_VIEW).apply {
@@ -56,13 +56,13 @@ class MediaVideoStudioActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             runCatching { startActivity(viewIntent) }.onFailure {
-                Toast.makeText(this, "কোনো ভিডিও প্লেয়ার পাওয়া যায়নি", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "No compatible video player found.", Toast.LENGTH_SHORT).show()
             }
         }
 
         binding.btnExportEdited.setOnClickListener {
             if (selectedVideoUri == null) {
-                Toast.makeText(this, "প্রথমে একটি ভিডিও নির্বাচন করুন", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Please select a video first.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             val ext = if (binding.cbExtractAudioOnly.isChecked) "m4a" else "mp4"
@@ -71,14 +71,14 @@ class MediaVideoStudioActivity : AppCompatActivity() {
 
         binding.btnCancelEdit.setOnClickListener {
             activeEditJob?.cancel()
-            binding.tvEditStatus.text = "ব্যবহারকারী এডিটিং বাতিল করেছেন।"
+            binding.tvEditStatus.text = "Video export cancelled by user."
         }
 
         binding.btnCloseMediaStudio.setOnClickListener { finish() }
     }
 
     private fun loadSelectedVideoDetails(uri: Uri) {
-        binding.tvVideoMetadata.text = "ভিডিওর তথ্য পড়া হচ্ছে..."
+        binding.tvVideoMetadata.text = "Reading video metadata..."
         lifecycleScope.launch {
             val meta = VideoEditorProcessor.inspectVideo(this@MediaVideoStudioActivity, uri)
             val preview = VideoEditorProcessor.extractPreviewFrame(this@MediaVideoStudioActivity, uri)
@@ -88,11 +88,11 @@ class MediaVideoStudioActivity : AppCompatActivity() {
             if (meta != null) {
                 val sec = meta.durationMs / 1000.0
                 binding.tvVideoMetadata.text =
-                    "রেজোলিউশন: ${meta.width}x${meta.height} | দৈর্ঘ্য: ${"%.1f".format(sec)}s | রোটেশন: ${meta.rotationDegrees}° | অডিও: ${if (meta.hasAudio) "আছে" else "নেই"}"
+                    "Resolution: ${meta.width}x${meta.height} | Duration: ${"%.1f".format(sec)}s | Rotation: ${meta.rotationDegrees}° | Audio: ${if (meta.hasAudio) "Yes" else "No"}"
                 binding.etStartSec.setText("0")
                 binding.etEndSec.setText((meta.durationMs / 1000L).coerceAtLeast(1L).toString())
             } else {
-                binding.tvVideoMetadata.text = "ভিডিও মেটাডেটা পড়া যায়নি।"
+                binding.tvVideoMetadata.text = "Could not read video metadata."
             }
         }
     }
@@ -112,7 +112,7 @@ class MediaVideoStudioActivity : AppCompatActivity() {
 
         activeEditJob?.cancel()
         activeEditJob = lifecycleScope.launch {
-            binding.tvEditStatus.text = "প্রসেসিং শুরু হচ্ছে (0%)..."
+            binding.tvEditStatus.text = "Processing video (0%)..."
             val outcome = VideoEditorProcessor.processVideoNonDestructive(
                 context = this@MediaVideoStudioActivity,
                 sourceUri = srcUri,
@@ -121,7 +121,7 @@ class MediaVideoStudioActivity : AppCompatActivity() {
                 isCancelled = { activeEditJob?.isCancelled == true },
                 onProgressPct = { pct ->
                     runOnUiThread {
-                        binding.tvEditStatus.text = "প্রসেসিং চলছে: $pct%"
+                        binding.tvEditStatus.text = "Processing: $pct%"
                     }
                 }
             )

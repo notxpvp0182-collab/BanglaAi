@@ -3,30 +3,36 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_black"
-    android:padding="16dp">
+    android:padding="@dimen/screen_padding">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="স্বাগতম ও অনুমতি ড্যাশবোর্ড"
-            android:textColor="@color/accent_green"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:background="@drawable/bg_header_gradient"
+            android:orientation="vertical"
+            android:padding="@dimen/card_padding">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_card"
-            android:padding="12dp"
-            android:text="@string/privacy_notice_bengali"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Welcome &amp; Permissions"
+                android:textColor="@color/text_primary"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/privacy_notice_english"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <!-- Microphone Permission Card -->
         <LinearLayout
@@ -35,23 +41,23 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="@dimen/card_padding">
 
             <TextView
                 android:id="@+id/tvMicStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="১. মাইক্রোফোন অনুমতি (ঐচ্ছিক - ভয়েস চ্যাটের জন্য)"
+                android:text="1. Microphone Permission (Optional)"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnGrantMic"
+                style="@style/Widget.BengaliAgent.Button.Secondary"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:backgroundTint="@color/accent_blue"
-                android:text="মাইক্রোফোন অনুমতি দিন" />
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:text="Grant Microphone Access" />
         </LinearLayout>
 
         <!-- Notification Permission Card -->
@@ -61,23 +67,23 @@
             android:layout_marginTop="10dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="@dimen/card_padding">
 
             <TextView
                 android:id="@+id/tvNotifStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="২. নোটিফিকেশন অনুমতি (সেশন কন্ট্রোল দেখানোর জন্য)"
+                android:text="2. Notification Permission (Session Controls)"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnGrantNotif"
+                style="@style/Widget.BengaliAgent.Button.Secondary"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:backgroundTint="@color/accent_blue"
-                android:text="নোটিফিকেশন অনুমতি দিন" />
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:text="Grant Notification Access" />
         </LinearLayout>
 
         <!-- Accessibility Permission Card -->
@@ -87,13 +93,13 @@
             android:layout_marginTop="10dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="@dimen/card_padding">
 
             <TextView
                 android:id="@+id/tvAccessibilityStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="৩. অ্যাক্সেসিবিলিটি সার্ভিস (ঐচ্ছিক - স্ক্রিন ট্যাপ ও অটোমেশনের জন্য)"
+                android:text="3. Accessibility Service (Optional - UI Automation)"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
 
@@ -101,17 +107,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="সিস্টেম সেটিংস থেকে আপনাকে নিজে এটি চালু বা বন্ধ করতে হবে।"
+                android:text="Must be enabled manually by you in Android Accessibility Settings."
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btnOpenAccessibility"
+                style="@style/Widget.BengaliAgent.Button.Secondary"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:backgroundTint="@color/bg_surface"
-                android:text="অ্যাক্সেসিবিলিটি সেটিংস খুলুন" />
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:text="Open Accessibility Settings" />
         </LinearLayout>
 
         <!-- Overlay Permission Card -->
@@ -121,55 +127,48 @@
             android:layout_marginTop="10dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="@dimen/card_padding">
 
             <TextView
                 android:id="@+id/tvOverlayStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="৪. ভাসমান কন্ট্রোল বার / Overlay (ঐচ্ছিক)"
+                android:text="4. Floating Control Bar / Overlay (Optional)"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnOpenOverlay"
+                style="@style/Widget.BengaliAgent.Button.Secondary"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:backgroundTint="@color/bg_surface"
-                android:text="ওভারলে সেটিংস খুলুন" />
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:text="Open Overlay Settings" />
         </LinearLayout>
 
-        <!-- Revoke / App Info Button -->
         <Button
             android:id="@+id/btnOpenAppDetails"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="যেকোনো অনুমতি বাতিল করতে সিস্টেম অ্যাপ সেটিংস খুলুন"
-            android:textColor="@color/accent_amber" />
-
-        <!-- Configure AI Providers Button -->
-        <Button
-            android:id="@+id/btnConfigureProviders"
+            style="@style/Widget.BengaliAgent.Button.Secondary"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:backgroundTint="@color/accent_blue"
-            android:text="Gemini / Groq / OpenRouter API সেটআপ করুন"
-            android:textColor="@color/text_primary" />
+            android:layout_marginTop="12dp"
+            android:text="Open System App Settings (Revoke Permissions)" />
 
-        <!-- Finish Setup (Even with optional permissions missing) -->
+        <Button
+            android:id="@+id/btnConfigureProviders"
+            style="@style/Widget.BengaliAgent.Button.Secondary"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="10dp"
+            android:text="Configure AI Connection (Google Gemini)" />
+
         <Button
             android:id="@+id/btnFinishSetup"
+            style="@style/Widget.BengaliAgent.Button.Primary"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginTop="12dp"
-            android:backgroundTint="@color/accent_green"
-            android:text="সেটআপ সম্পন্ন করুন (মূল স্ক্রিনে যান)"
-            android:textColor="@color/bg_black"
-            android:textStyle="bold" />
+            android:text="Continue to Assistant" />
 
     </LinearLayout>
 </ScrollView>

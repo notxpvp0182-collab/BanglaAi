@@ -56,7 +56,7 @@ class MemorySettingsActivity : AppCompatActivity() {
                 cm?.setPrimaryClip(ClipData.newPlainText("agent_memory_export", json))
                 Toast.makeText(
                     this@MemorySettingsActivity,
-                    "মেমোরি JSON ক্লিপবোর্ডে কপি করা হয়েছে (${json.length} bytes)",
+                    "Memory JSON copied to clipboard (${json.length} bytes)",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -64,20 +64,20 @@ class MemorySettingsActivity : AppCompatActivity() {
 
         binding.btnClearAllMemory.setOnClickListener {
             AlertDialog.Builder(this)
-                .setTitle("সব মেমোরি মুছে ফেলবেন?")
-                .setMessage("এটি আপনার সংরক্ষিত সব তথ্য, চ্যাট ট্রান্সক্রিপ্ট এবং কাজের ইতিহাস স্থায়ীভাবে মুছে ফেলবে।")
-                .setPositiveButton("হ্যাঁ, মুছুন") { _, _ ->
+                .setTitle("Clear All Memory?")
+                .setMessage("This will permanently delete all saved facts, conversation transcripts, and task history from local storage.")
+                .setPositiveButton("Clear All") { _, _ ->
                     lifecycleScope.launch {
                         memoryRepo.clearAllMemory()
                         loadFacts()
                         Toast.makeText(
                             this@MemorySettingsActivity,
-                            "সব মেমোরি মুছে ফেলা হয়েছে",
+                            "All local memory cleared.",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
                 }
-                .setNegativeButton("বাতিল", null)
+                .setNegativeButton("Cancel", null)
                 .show()
         }
 
@@ -99,20 +99,20 @@ class MemorySettingsActivity : AppCompatActivity() {
             setPadding(40, 20, 40, 10)
         }
         val etTitle = EditText(this).apply {
-            hint = "শিরোনাম (যেমন: প্রিয় খাবার / প্রজেক্টের নাম)"
+            hint = "Title (e.g., Favorite Language / Project Goal)"
             setText(existing?.title.orEmpty())
         }
         val etDetails = EditText(this).apply {
-            hint = "বিস্তারিত তথ্য..."
+            hint = "Details..."
             setText(existing?.details.orEmpty())
         }
         container.addView(etTitle)
         container.addView(etDetails)
 
         AlertDialog.Builder(this)
-            .setTitle(if (existing == null) "নতুন মেমোরি যোগ করুন" else "মেমোরি সংশোধন করুন")
+            .setTitle(if (existing == null) "Add Memory Fact" else "Edit Memory Fact")
             .setView(container)
-            .setPositiveButton("সংরক্ষণ") { _, _ ->
+            .setPositiveButton("Save") { _, _ ->
                 val title = etTitle.text?.toString()?.trim().orEmpty()
                 val details = etDetails.text?.toString()?.trim().orEmpty()
                 if (title.isNotEmpty() && details.isNotEmpty()) {
@@ -127,7 +127,7 @@ class MemorySettingsActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("বাতিল", null)
+            .setNegativeButton("Cancel", null)
             .show()
     }
 }

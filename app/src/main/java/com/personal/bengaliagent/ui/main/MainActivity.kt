@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity() {
         if (granted) {
             startVoicePushToTalk()
         } else {
-            Toast.makeText(this, "ভয়েস ইনপুটের জন্য মাইক্রোফোন অনুমতি প্রয়োজন", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Microphone permission is required for voice input.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -83,13 +83,13 @@ class MainActivity : AppCompatActivity() {
             isAssistantEnabled = true
             updateState(AgentState.SCREEN_SHARING)
             appendSystemMessage(
-                "স্ক্রিন শেয়ারিং চালু হয়েছে। স্ক্রিন ফ্রেম শুধুমাত্র প্রয়োজনে এবং কম রেজোলিউশনে পর্যবেক্ষণ করা হবে। যেকোনো সময় 'থামুন (Stop)' চাপলে এটি বন্ধ হবে।",
+                "Screen sharing enabled. Frames are inspected at reduced resolution only when needed. Tap 'Stop' anytime to end capture.",
                 persist = false
             )
             refreshStatusUi()
         } else {
             isScreenSharing = false
-            appendSystemMessage("স্ক্রিন শেয়ারিং অনুমতি বাতিল করা হয়েছে।", persist = false)
+            appendSystemMessage("Screen sharing permission was declined.", persist = false)
             refreshStatusUi()
         }
     }
@@ -112,8 +112,8 @@ class MainActivity : AppCompatActivity() {
             onTranscriptReady = { spokenText ->
                 handleIncomingPrompt(spokenText)
             },
-            onStatusUpdate = { statusBn ->
-                appendSystemMessage(statusBn, persist = false)
+            onStatusUpdate = { statusEn ->
+                appendSystemMessage(statusEn, persist = false)
             },
             onListeningStateChanged = { listening ->
                 isMicMuted = !listening
@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
                 binding.rvTranscript.scrollToPosition(messages.size - 1)
             } else {
                 appendSystemMessage(
-                    "স্বাগতম! আমি আপনার বাংলা এআই সহকারী। আপনি কথা বলে বা লিখে প্রশ্ন করতে পারেন, অনলাইনে তথ্য খুঁজতে পারেন এবং অনুমোদিত ফোন অ্যাকশন চালাতে পারেন।",
+                    "Welcome to Bengali AI Agent. Connect your Gemini API key in 'AI Connection' to chat in English or Bengali, research online, or run verified phone actions.",
                     persist = false
                 )
             }
@@ -186,12 +186,12 @@ class MainActivity : AppCompatActivity() {
                         binding.btnPauseResume.performClick()
                     }
                     AgentSessionBus.Command.STOP_CURRENT_TASK -> {
-                        stopAllCaptureAndTasks("কন্ট্রোল বার থেকে চলমান কাজ থামানো হয়েছে।")
+                        stopAllCaptureAndTasks("Current task stopped from control bar.")
                         refreshStatusUi()
                     }
                     AgentSessionBus.Command.DISABLE_SESSION -> {
                         isAssistantEnabled = false
-                        stopAllCaptureAndTasks("সেশন সম্পূর্ণ বন্ধ করা হয়েছে।")
+                        stopAllCaptureAndTasks("Assistant session disabled.")
                         refreshStatusUi()
                     }
                 }
@@ -236,7 +236,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnToggleAssistant.setOnClickListener {
             isAssistantEnabled = !isAssistantEnabled
             if (!isAssistantEnabled) {
-                stopAllCaptureAndTasks("সহকারী বন্ধ করা হয়েছে। মাইক্রোফোন ও স্ক্রিন ক্যাপচার সম্পূর্ণ বন্ধ।")
+                stopAllCaptureAndTasks("Assistant disabled. Microphone and screen capture are off.")
             } else {
                 ContextCompat.startForegroundService(
                     this,
@@ -259,7 +259,7 @@ class MainActivity : AppCompatActivity() {
                 isScreenSharing = false
                 updateState(AgentState.PAUSED)
                 appendSystemMessage(
-                    "এজেন্ট বিরতি (Paused) মোডে গেছে। অডিও এবং স্ক্রিন ক্যাপচার বন্ধ করা হয়েছে।",
+                    "Assistant paused. Audio and screen capture have been stopped.",
                     persist = false
                 )
             }
@@ -267,13 +267,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnStopTask.setOnClickListener {
-            stopAllCaptureAndTasks("ব্যবহারকারী কাজটি থামিয়ে দিয়েছেন (Stopped)।")
+            stopAllCaptureAndTasks("Stopped current task and released active capture.")
             refreshStatusUi()
         }
 
         binding.btnMicToggle.setOnClickListener {
             if (currentState == AgentState.PAUSED) {
-                Toast.makeText(this, "প্রথমে বিরতি (Pause) আনপজ করুন", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Resume the assistant before enabling the microphone.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             if (!isMicMuted) {
@@ -299,7 +299,7 @@ class MainActivity : AppCompatActivity() {
                 ScreenCaptureManager.stopProjection()
                 isScreenSharing = false
                 updateState(AgentState.READY)
-                appendSystemMessage("স্ক্রিন শেয়ারিং বন্ধ করা হয়েছে।", persist = false)
+                appendSystemMessage("Screen sharing stopped.", persist = false)
                 refreshStatusUi()
             } else {
                 val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -325,7 +325,7 @@ class MainActivity : AppCompatActivity() {
             prompt.contains("থামো") ||
             prompt.contains("বন্ধ করো")
         ) {
-            stopAllCaptureAndTasks("আপনার নির্দেশে চলমান কাজ তাৎক্ষণিক বন্ধ করা হয়েছে।")
+            stopAllCaptureAndTasks("Task stopped immediately at your request.")
             refreshStatusUi()
             return
         }
@@ -350,7 +350,7 @@ class MainActivity : AppCompatActivity() {
         if (!isNetworkAvailable()) {
             updateState(AgentState.OFFLINE)
             appendSystemMessage(
-                "আপনি বর্তমানে অফলাইনে আছেন। তবে আপনার বার্তাটি লোকাল মেমোরিতে সংরক্ষিত হয়েছে।",
+                "You are currently offline. Your message has been saved to local memory.",
                 persist = false
             )
             refreshStatusUi()
@@ -379,7 +379,7 @@ class MainActivity : AppCompatActivity() {
                     ChatMessage(
                         id = 0L,
                         role = ChatMessage.Role.SYSTEM,
-                        text = "নিচের সংরক্ষিত মেমোরি থেকে প্রাসঙ্গিক তথ্য ব্যবহার করে উত্তর দাও। তথ্য না থাকলে বানিয়ে বলবে না:\n$memoryContext"
+                        text = "Use the following retrieved local memory records when answering questions about the past. If a requested past fact is not in these records, state honestly that it is not in memory:\n$memoryContext"
                     )
                 )
             }
@@ -395,7 +395,7 @@ class MainActivity : AppCompatActivity() {
                     )
                 )
                 if (researchBundle.sources.isNotEmpty()) {
-                    citationsFooter = "\n\nঅনলাইন সূত্র (Sources):\n" +
+                    citationsFooter = "\n\nSources:\n" +
                         researchBundle.sources.joinToString("\n") { "• ${it.title}: ${it.url}" }
                 }
             }
@@ -438,7 +438,7 @@ class MainActivity : AppCompatActivity() {
                     )
                     val summaryReport = buildString {
                         if (plan.thoughtBn.isNotBlank()) {
-                            appendLine("পরিকল্পনা: ${plan.thoughtBn}")
+                            appendLine("Plan: ${plan.thoughtBn}")
                         }
                         stepResults.forEachIndexed { i, r ->
                             val statusIcon = if (r.verifiedSuccess) "✓" else "✗"
@@ -458,7 +458,7 @@ class MainActivity : AppCompatActivity() {
                         id = System.currentTimeMillis(),
                         role = ChatMessage.Role.ASSISTANT,
                         text = summaryReport,
-                        providerUsed = "${routed.providerUsed?.displayName} (${routed.modelUsed})"
+                        providerUsed = routed.providerUsed?.displayName
                     )
                     messages.add(assistantMsg)
                     memoryRepo.saveChatMessage(assistantMsg)
@@ -489,7 +489,7 @@ class MainActivity : AppCompatActivity() {
                 id = System.currentTimeMillis(),
                 role = ChatMessage.Role.ASSISTANT,
                 text = finalReply,
-                providerUsed = "${routed.providerUsed?.displayName} (${routed.modelUsed})"
+                providerUsed = routed.providerUsed?.displayName
             )
             messages.add(assistantMsg)
             memoryRepo.saveChatMessage(assistantMsg)
@@ -508,22 +508,22 @@ class MainActivity : AppCompatActivity() {
         suspendCoroutine { cont ->
             runOnUiThread {
                 AlertDialog.Builder(this)
-                    .setTitle("সংবেদনশীল কাজের অনুমোদন প্রয়োজন (${action.riskLevel.name})")
+                    .setTitle("Confirm Sensitive Action (${action.riskLevel.name})")
                     .setMessage(
-                        "এজেন্ট নিচের কাজটি করতে চাচ্ছে:\n\n" +
-                            "টুল: ${action.tool.name}\n" +
-                            "লক্ষ্য: ${action.targetLabel.ifBlank { action.textToType }}\n" +
-                            "কারণ: ${action.reasoningBn}\n\n" +
-                            "আপনি কি এটি অনুমোদন করছেন?"
+                        "The assistant is requesting permission to execute:\n\n" +
+                            "Action: ${action.tool.name}\n" +
+                            "Target: ${action.targetLabel.ifBlank { action.textToType }}\n" +
+                            "Reason: ${action.reasoningBn}\n\n" +
+                            "Do you approve this action?"
                     )
                     .setCancelable(false)
-                    .setPositiveButton("হ্যাঁ, অনুমোদন করুন") { _, _ -> cont.resume(true) }
-                    .setNegativeButton("না, বাতিল করুন") { _, _ -> cont.resume(false) }
+                    .setPositiveButton("Approve") { _, _ -> cont.resume(true) }
+                    .setNegativeButton("Cancel") { _, _ -> cont.resume(false) }
                     .show()
             }
         }
 
-    private fun stopAllCaptureAndTasks(reasonBn: String) {
+    private fun stopAllCaptureAndTasks(reasonEn: String) {
         activeTaskJob?.cancel()
         activeTaskJob = null
         voiceManager.stopListeningImmediately()
@@ -533,7 +533,7 @@ class MainActivity : AppCompatActivity() {
         isScreenSharing = false
         stopService(Intent(this, AgentForegroundService::class.java))
         updateState(AgentState.READY)
-        appendSystemMessage(reasonBn, persist = false)
+        appendSystemMessage(reasonEn, persist = false)
     }
 
     private fun updateState(newState: AgentState) {
@@ -541,16 +541,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshStatusUi() {
-        binding.tvAgentState.text = currentState.labelBn
-        binding.btnToggleAssistant.text = if (isAssistantEnabled) "সহকারী: চালু" else "সহকারী: বন্ধ"
+        binding.tvAgentState.text = currentState.labelEn
+        binding.btnToggleAssistant.text =
+            if (isAssistantEnabled) "Assistant: On" else "Enable Assistant"
         binding.btnPauseResume.text =
-            if (currentState == AgentState.PAUSED) "পুনরায় শুরু (Resume)" else "বিরতি (Pause)"
+            if (currentState == AgentState.PAUSED) "Resume" else "Pause"
         binding.btnScreenToggle.text =
-            if (isScreenSharing) "স্ক্রিন ভিউ: চালু" else "স্ক্রিন ভিউ: বন্ধ"
-        binding.btnMicToggle.text = if (isMicMuted) "🔇" else "🎤"
+            if (isScreenSharing) "Screen View: On" else "Screen View: Off"
+        binding.btnMicToggle.text = if (isMicMuted) "Muted" else "Live"
 
-        val micStatus = if (isMicMuted) "মাইক বন্ধ" else "মাইক চালু"
-        val screenStatus = if (isScreenSharing) "🟢 স্ক্রিন চালু" else "স্ক্রিন বন্ধ"
+        val micStatus = if (isMicMuted) "Mic Off" else "Mic Live"
+        val screenStatus = if (isScreenSharing) "Screen Live" else "Screen Off"
         binding.tvPrivacyIndicator.text = "$micStatus | $screenStatus"
     }
 

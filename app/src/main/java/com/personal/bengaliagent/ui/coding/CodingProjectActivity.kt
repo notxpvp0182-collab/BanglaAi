@@ -26,7 +26,7 @@ class CodingProjectActivity : AppCompatActivity() {
     ) { uri ->
         if (uri != null) {
             selectedTreeUri = uri
-            binding.tvSelectedFolder.text = "নির্বাচিত ফোল্ডার: $uri"
+            binding.tvSelectedFolder.text = "Selected Folder: $uri"
         }
     }
 
@@ -42,7 +42,7 @@ class CodingProjectActivity : AppCompatActivity() {
         binding.btnGenerateCodeAi.setOnClickListener {
             val fileName = binding.etFileName.text?.toString()?.trim().orEmpty()
             val promptOrNotes = binding.etCodeContent.text?.toString()?.trim().orEmpty()
-            binding.tvCodingStatus.text = "এআই দিয়ে কোড তৈরি করা হচ্ছে..."
+            binding.tvCodingStatus.text = "Generating code with Google Gemini..."
             lifecycleScope.launch {
                 val requestPrompt =
                     "Write clean, complete source code for file '$fileName'. Context/request: $promptOrNotes. Return only code."
@@ -52,7 +52,7 @@ class CodingProjectActivity : AppCompatActivity() {
                 if (routed.success) {
                     binding.etCodeContent.setText(routed.replyText)
                     binding.tvCodingStatus.text =
-                        "কোড তৈরি হয়েছে (${routed.providerUsed?.displayName})। সংরক্ষণ করার আগে যাচাই করুন।"
+                        "Code generated (${routed.providerUsed?.displayName}). Review before saving."
                 } else {
                     binding.tvCodingStatus.text = routed.replyText
                 }
@@ -62,13 +62,13 @@ class CodingProjectActivity : AppCompatActivity() {
         binding.btnSaveCodeFile.setOnClickListener {
             val treeUri = selectedTreeUri
             if (treeUri == null) {
-                Toast.makeText(this, "প্রথমে প্রজেক্ট ফোল্ডার নির্বাচন করুন", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Please select a project folder first.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             val fileName = binding.etFileName.text?.toString()?.trim().orEmpty()
             val code = binding.etCodeContent.text?.toString().orEmpty()
             if (fileName.isEmpty()) {
-                Toast.makeText(this, "ফাইলের নাম লিখুন", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Please enter a file name.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             lifecycleScope.launch {
@@ -79,9 +79,9 @@ class CodingProjectActivity : AppCompatActivity() {
                     code
                 )
                 binding.tvCodingStatus.text = if (saved) {
-                    "'$fileName' সফলভাবে ফোল্ডারে সংরক্ষিত হয়েছে।"
+                    "Saved '$fileName' to selected project folder."
                 } else {
-                    "ফাইল সংরক্ষণ ব্যর্থ হয়েছে।"
+                    "Failed to save file."
                 }
             }
         }
@@ -93,20 +93,20 @@ class CodingProjectActivity : AppCompatActivity() {
             val check = CodingWorkspaceManager.evaluateShellCommandSafety(rawCmd)
             AlertDialog.Builder(this)
                 .setTitle(
-                    if (check.isDestructiveOrHighRisk) "⚠️ ঝুঁকিপূর্ণ কমান্ড সতর্কতা!" else "শেল কমান্ড অনুমোদন"
+                    if (check.isDestructiveOrHighRisk) "High-Risk Command Warning" else "Confirm Shell Command"
                 )
-                .setMessage("${check.warningBn}\n\nকমান্ড:\n$rawCmd")
-                .setPositiveButton("অনুমোদন ও কপি করুন") { _, _ ->
+                .setMessage("${check.warningBn}\n\nCommand:\n$rawCmd")
+                .setPositiveButton("Approve & Copy") { _, _ ->
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                     cm?.setPrimaryClip(ClipData.newPlainText("termux_cmd", rawCmd))
                     val opened = CodingWorkspaceManager.openTermuxApp(this)
                     binding.tvCodingStatus.text = if (opened) {
-                        "কমান্ড ক্লিপবোর্ডে কপি করা হয়েছে এবং Termux খোলা হয়েছে।"
+                        "Command copied to clipboard and Termux launched."
                     } else {
-                        "কমান্ড ক্লিপবোর্ডে কপি করা হয়েছে (ফোনে Termux ইনস্টল করা নেই)।"
+                        "Command copied to clipboard (Termux is not installed on this device)."
                     }
                 }
-                .setNegativeButton("বাতিল", null)
+                .setNegativeButton("Cancel", null)
                 .show()
         }
 
