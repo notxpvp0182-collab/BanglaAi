@@ -19,10 +19,12 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Multi-Provider Client supporting:
- * 1. Google Gemini (Both new 'AQ.' Auth/Vertex Express keys and 'AIza' keys — NEVER sending Bearer header which triggers 401).
- * 2. Groq Cloud (Prioritizing active production chat models).
- * 3. OpenRouter.
+ * Multi-Provider Client with priority auto-selection for:
+ * 1. gemini-3.8-flash
+ * 2. gemini-3.6-flash
+ * 3. gemini-3.5-flash-lite
+ * 4. gemini-3.1-flash-lite
+ * Automatically connects to the latest available model that responds to the user's API key.
  */
 class LlmProviderClient(
     private val httpClient: OkHttpClient = defaultHttpClient(),
@@ -62,7 +64,6 @@ class LlmProviderClient(
             .get()
 
         if (provider == ProviderType.GEMINI) {
-            // IMPORTANT: Never send Authorization: Bearer with AQ. or AIza keys!
             reqBuilder.addHeader("x-goog-api-key", trimmedKey)
         } else {
             reqBuilder.addHeader("Authorization", "Bearer $trimmedKey")
@@ -72,8 +73,6 @@ class LlmProviderClient(
             httpClient.newCall(reqBuilder.build()).execute().use { response ->
                 val rawBody = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    // For Gemini AQ. keys (such as Vertex Express keys where GET /models is blocked),
-                    // provide standard fallback candidates so discoverAndVerifyProvider can test them directly!
                     if (provider == ProviderType.GEMINI && baseUrlOverride.isEmpty()) {
                         return@withContext DiscoveryResponse(
                             eligibleModels = defaultGeminiFallbackCandidates()
@@ -115,10 +114,13 @@ class LlmProviderClient(
     }
 
     private fun defaultGeminiFallbackCandidates(): List<DiscoveredModel> = listOf(
+        DiscoveredModel("gemini-3.8-flash", "Gemini 3.8 Flash", listOf("generateContent")),
+        DiscoveredModel("gemini-3.6-flash", "Gemini 3.6 Flash", listOf("generateContent")),
+        DiscoveredModel("gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite", listOf("generateContent")),
+        DiscoveredModel("gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite", listOf("generateContent")),
+        DiscoveredModel("gemini-3.1-flash-lite-preview", "Gemini 3.1 Flash Lite Preview", listOf("generateContent")),
         DiscoveredModel("gemini-2.5-flash", "Gemini 2.5 Flash", listOf("generateContent")),
-        DiscoveredModel("gemini-2.0-flash", "Gemini 2.0 Flash", listOf("generateContent")),
-        DiscoveredModel("gemini-2.5-pro", "Gemini 2.5 Pro", listOf("generateContent")),
-        DiscoveredModel("gemini-1.5-flash", "Gemini 1.5 Flash", listOf("generateContent"))
+        DiscoveredModel("gemini-2.0-flash", "Gemini 2.0 Flash", listOf("generateContent"))
     )
 
     fun parseAndRankGeminiModels(rawJson: String): List<DiscoveredModel> {
@@ -165,6 +167,54 @@ class LlmProviderClient(
         }
     }
 
+    /**
+     * Ranks models so the user's requested 3.x Flash / Flash-Lite models are always tried first
+     * from newest to oldest, followed by any other available Gemini models.
+     */
+    private fun scoreGeminiCandidate(model: DiscoveredModel): Int {
+        val id = model.id.lowercase()
+
+        // 1. Explicit priority for user's requested Gemini 3.x models
+        when {
+            id == "gemini-3.8-flash" || id.startsWith("gemini-3.8-flash") -> return 10000
+            id == "gemini-3.6-flash" || id.startsWith("gemini-3.6-flash") -> return 9500
+            id == "gemini-3.5-flash-lite" || id.startsWith("gemini-3.5-flash-lite") -> return 9000
+            id == "gemini-3.1-flash-lite" || id.startsWith("gemini-3.1-flash-lite") -> return 8500
+        }
+
+        var score = 0
+        val isPreviewOrExp = id.contains("preview") ||
+            id.contains("exp") ||
+            id.contains("experimental") ||
+            id.contains("alpha") ||
+            id.contains("beta")
+
+        // Prefer newer major.minor versions dynamically (e.g. 3.x > 2.5 > 2.0)
+        val versionMatch = Regex("gemini-(\\d+)\\.(\\d+)").find(id)
+        if (versionMatch != null) {
+            val major = versionMatch.groupValues[1].toIntOrNull() ?: 1
+            val minor = versionMatch.groupValues[2].toIntOrNull() ?: 0
+            score += (major * 1000) + (minor * 100)
+        } else if (id.contains("gemini-3")) {
+            score += 3000
+        } else if (id.contains("gemini-2")) {
+            score += 2000
+        }
+
+        if (!isPreviewOrExp) {
+            score += 500
+        }
+
+        when {
+            id.contains("flash") && !id.contains("lite") && !id.contains("8b") -> score += 300
+            id.contains("flash-lite") -> score += 250
+            id.contains("pro") -> score += 200
+        }
+
+        if (model.inputTokenLimit >= 100_000) score += 25
+        return score
+    }
+
     private fun parseAndRankOpenAiCompatibleModels(
         provider: ProviderType,
         rawJson: String
@@ -201,11 +251,13 @@ class LlmProviderClient(
                 )
             } else {
                 listOf(
+                    "google/gemini-3.8-flash",
+                    "google/gemini-3.6-flash",
+                    "google/gemini-3.5-flash-lite",
+                    "google/gemini-3.1-flash-lite",
                     "google/gemini-2.5-flash",
-                    "google/gemini-2.0-flash-001",
                     "meta-llama/llama-3.3-70b-instruct",
-                    "openai/gpt-4o-mini",
-                    "anthropic/claude-3.5-haiku"
+                    "openai/gpt-4o-mini"
                 )
             }
 
@@ -223,37 +275,6 @@ class LlmProviderClient(
         } catch (e: Exception) {
             emptyList()
         }
-    }
-
-    private fun scoreGeminiCandidate(model: DiscoveredModel): Int {
-        val id = model.id.lowercase()
-        var score = 0
-        val isPreviewOrExp = id.contains("preview") ||
-            id.contains("exp") ||
-            id.contains("experimental") ||
-            id.contains("alpha") ||
-            id.contains("beta")
-
-        if (!isPreviewOrExp) score += 1000
-
-        when {
-            id == "gemini-2.5-flash" -> score += 600
-            id == "gemini-2.0-flash" -> score += 550
-            id == "gemini-2.5-pro" -> score += 500
-            id == "gemini-1.5-flash" -> score += 450
-            id.contains("flash") && !id.contains("lite") && !id.contains("8b") -> score += 300
-            id.contains("pro") -> score += 200
-            id.contains("flash-lite") || id.contains("8b") -> score += 100
-        }
-
-        val versionMatch = Regex("gemini-(\\d+)\\.(\\d+)").find(id)
-        if (versionMatch != null) {
-            val major = versionMatch.groupValues[1].toIntOrNull() ?: 1
-            val minor = versionMatch.groupValues[2].toIntOrNull() ?: 0
-            score += (major * 100) + (minor * 20)
-        }
-        if (model.inputTokenLimit >= 100_000) score += 25
-        return score
     }
 
     suspend fun discoverAndVerifyGemini(apiKey: String): ProviderTestResult =
@@ -281,11 +302,28 @@ class LlmProviderClient(
             )
         }
 
-        var lastErrorResult: RawChatResponse? = null
-        val maxCandidatesToTry = discovery.eligibleModels.take(5)
+        // For live Gemini connections, ensure the user's priority 3.x models and discovered models
+        // are both in the candidate queue, ordered by highest priority score first.
+        val candidateQueue = if (provider == ProviderType.GEMINI && baseUrlOverride.isEmpty()) {
+            val merged = LinkedHashMap<String, DiscoveredModel>()
+            // 1st: Any discovered models from the live key (already sorted with 3.8 -> 3.6 -> 3.5-lite -> 3.1-lite first)
+            for (m in discovery.eligibleModels) {
+                merged[m.id] = m
+            }
+            // 2nd: Ensure the priority fallback list is also included in case /models omitted a preview/lite alias
+            for (f in defaultGeminiFallbackCandidates()) {
+                if (!merged.containsKey(f.id)) {
+                    merged[f.id] = f
+                }
+            }
+            merged.values.sortedByDescending { scoreGeminiCandidate(it) }.take(8)
+        } else {
+            discovery.eligibleModels.take(6)
+        }
 
-        // 1. Try standard endpoint candidates
-        for (candidate in maxCandidatesToTry) {
+        var lastErrorResult: RawChatResponse? = null
+
+        for (candidate in candidateQueue) {
             try {
                 val verifyResult = executeChatRequest(
                     provider = provider,
@@ -302,12 +340,13 @@ class LlmProviderClient(
                         provider = provider,
                         latencyMs = elapsed,
                         verifiedModel = candidate.id,
-                        userMessage = "Connected to ${provider.displayName} (${elapsed}ms)",
+                        userMessage = "Connected: ${candidate.id} (${elapsed}ms)",
                         errorCategory = ErrorCategory.NONE
                     )
                 }
                 lastErrorResult = verifyResult
-                if (verifyResult.errorCategory == ErrorCategory.QUOTA_OR_RATE_LIMIT) {
+                // Only stop early if the key itself is rejected as invalid
+                if (verifyResult.errorCategory == ErrorCategory.INVALID_KEY) {
                     break
                 }
             } catch (ce: CancellationException) {
@@ -321,17 +360,18 @@ class LlmProviderClient(
             }
         }
 
-        // 2. Special handling for Google 'AQ.' keys created via Vertex AI Express Mode:
-        // If AI Studio endpoint returned 401/403/400 for an AQ. key, test Vertex AI Express Mode endpoints!
+        // Special fallback for Google 'AQ.' keys created via Vertex AI Express Mode
         if (provider == ProviderType.GEMINI &&
             trimmedKey.startsWith("AQ.") &&
             baseUrlOverride.isEmpty()
         ) {
             val vertexExpressModels = listOf(
+                "vertex-v1:gemini-3.8-flash",
+                "vertex-v1:gemini-3.6-flash",
+                "vertex-v1:gemini-3.5-flash-lite",
+                "vertex-v1:gemini-3.1-flash-lite",
                 "vertex-v1:gemini-2.5-flash",
-                "vertex-v1:gemini-2.0-flash",
-                "vertex-v1beta1:gemini-2.5-flash",
-                "vertex-v1beta1:gemini-2.0-flash"
+                "vertex-v1:gemini-2.0-flash"
             )
             for (vertexModelTag in vertexExpressModels) {
                 try {
@@ -345,12 +385,13 @@ class LlmProviderClient(
                     )
                     if (verifyVertex.isSuccess) {
                         val elapsed = System.currentTimeMillis() - startMs
+                        val shortName = vertexModelTag.substringAfter(":")
                         return@withContext ProviderTestResult(
                             success = true,
                             provider = ProviderType.GEMINI,
                             latencyMs = elapsed,
                             verifiedModel = vertexModelTag,
-                            userMessage = "Connected to Google Gemini Vertex Express (${elapsed}ms)",
+                            userMessage = "Connected: $shortName (${elapsed}ms)",
                             errorCategory = ErrorCategory.NONE
                         )
                     }
@@ -501,7 +542,6 @@ class LlmProviderClient(
                             .put("temperature", 0.35)
                     )
 
-                // IMPORTANT: Authenticate with x-goog-api-key (NEVER Authorization: Bearer)
                 Request.Builder()
                     .url(url)
                     .addHeader("x-goog-api-key", apiKey)
