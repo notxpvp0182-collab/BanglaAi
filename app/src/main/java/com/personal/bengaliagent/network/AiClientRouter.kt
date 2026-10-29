@@ -8,8 +8,8 @@ import com.personal.bengaliagent.domain.model.ProviderTestResult
 import com.personal.bengaliagent.domain.model.ProviderType
 
 /**
- * Coordinates automatic Gemini discovery, key persistence, and chat requests.
- * Keeps the verified model ID strictly as an internal implementation detail.
+ * Routes requests across configured providers (Gemini, Groq, OpenRouter) with automatic
+ * model discovery and seamless failover.
  */
 class AiClientRouter(
     private val keyStore: SecureKeyStore,
@@ -23,26 +23,34 @@ class AiClientRouter(
         val providerUsed: ProviderType?
     )
 
-    suspend fun connectAndVerifyGemini(rawKey: String): ProviderTestResult {
+    suspend fun connectAndVerifyGemini(rawKey: String): ProviderTestResult =
+        connectAndVerifyProvider(ProviderType.GEMINI, rawKey)
+
+    suspend fun connectAndVerifyProvider(
+        provider: ProviderType,
+        rawKey: String
+    ): ProviderTestResult {
         val trimmed = rawKey.trim()
-        val result = client.discoverAndVerifyGemini(trimmed)
+        val result = client.discoverAndVerifyProvider(provider, trimmed)
         if (result.success && !result.verifiedModel.isNullOrBlank()) {
-            keyStore.saveApiKey(ProviderType.GEMINI, trimmed)
-            keyStore.setProviderVerified(ProviderType.GEMINI, true)
-            preferences.setVerifiedModel(ProviderType.GEMINI, result.verifiedModel)
-            preferences.setLastConnectionMessage("Connected to Google Gemini")
+            keyStore.saveApiKey(provider, trimmed)
+            keyStore.setProviderVerified(provider, true)
+            preferences.setVerifiedModel(provider, result.verifiedModel)
+            preferences.setPreferredProvider(provider)
+            preferences.setLastConnectionMessage("Connected to ${provider.displayName}")
         } else {
-            keyStore.setProviderVerified(ProviderType.GEMINI, false)
+            keyStore.setProviderVerified(provider, false)
             preferences.setLastConnectionMessage(result.userMessage)
         }
         return result
     }
 
-    suspend fun disconnectGemini() {
-        keyStore.deleteApiKey(ProviderType.GEMINI)
-        preferences.setVerifiedModel(ProviderType.GEMINI, null)
-        preferences.setLastConnectionMessage("Disconnected")
+    suspend fun disconnectProvider(provider: ProviderType) {
+        keyStore.deleteApiKey(provider)
+        preferences.setVerifiedModel(provider, null)
     }
+
+    suspend fun disconnectGemini() = disconnectProvider(ProviderType.GEMINI)
 
     suspend fun sendMessageWithFailover(
         messages: List<ChatMessage>,
@@ -51,72 +59,81 @@ class AiClientRouter(
         if (!preferences.isCloudSharingConsented()) {
             return RoutedResponse(
                 success = false,
-                replyText = "Cloud AI data sharing is currently disabled. Please enable it in AI Connection settings.",
+                replyText = "Cloud AI data sharing is disabled. Please enable it in Settings.",
                 providerUsed = null
             )
         }
 
-        val apiKey = keyStore.getApiKey(ProviderType.GEMINI)
-        if (apiKey.isNullOrBlank()) {
+        val preferred = preferences.getPreferredProvider()
+        val orderedProviders = (listOf(preferred) + ProviderType.entries).distinct()
+        val configuredProviders = orderedProviders.filter {
+            !keyStore.getApiKey(it).isNullOrBlank()
+        }
+
+        if (configuredProviders.isEmpty()) {
             return RoutedResponse(
                 success = false,
-                replyText = "Google Gemini is not connected yet. Open 'AI Connection' to enter your Gemini API key.",
+                replyText = "No AI provider is connected yet. Tap the ⚙ Settings icon at the top-right to connect Google Gemini, Groq, or OpenRouter.",
                 providerUsed = null
             )
         }
 
-        var modelId = preferences.getVerifiedModel(ProviderType.GEMINI)
-        if (modelId.isNullOrBlank()) {
-            val discovery = client.discoverAndVerifyGemini(apiKey)
-            if (!discovery.success || discovery.verifiedModel.isNullOrBlank()) {
+        val errors = mutableListOf<String>()
+        for (provider in configuredProviders) {
+            val apiKey = keyStore.getApiKey(provider) ?: continue
+            var modelId = preferences.getVerifiedModel(provider)
+
+            if (modelId.isNullOrBlank()) {
+                val discovery = client.discoverAndVerifyProvider(provider, apiKey)
+                if (discovery.success && !discovery.verifiedModel.isNullOrBlank()) {
+                    modelId = discovery.verifiedModel
+                    preferences.setVerifiedModel(provider, modelId)
+                } else {
+                    errors.add("${provider.displayName}: ${discovery.userMessage}")
+                    continue
+                }
+            }
+
+            var response = client.sendChatWithBoundedRetry(
+                provider = provider,
+                apiKey = apiKey,
+                modelName = modelId,
+                messages = messages,
+                maxRetries = 1,
+                base64JpegImage = base64JpegImage
+            )
+
+            if (!response.isSuccess && response.errorCategory == ErrorCategory.UNSUPPORTED_MODEL) {
+                val rediscovery = client.discoverAndVerifyProvider(provider, apiKey)
+                if (rediscovery.success && !rediscovery.verifiedModel.isNullOrBlank()) {
+                    modelId = rediscovery.verifiedModel
+                    preferences.setVerifiedModel(provider, modelId)
+                    response = client.sendChatWithBoundedRetry(
+                        provider = provider,
+                        apiKey = apiKey,
+                        modelName = modelId,
+                        messages = messages,
+                        maxRetries = 0,
+                        base64JpegImage = base64JpegImage
+                    )
+                }
+            }
+
+            if (response.isSuccess) {
                 return RoutedResponse(
-                    success = false,
-                    replyText = discovery.userMessage,
-                    providerUsed = null
+                    success = true,
+                    replyText = response.replyText,
+                    providerUsed = provider
                 )
+            } else {
+                errors.add(response.errorMessage)
             }
-            modelId = discovery.verifiedModel
-            preferences.setVerifiedModel(ProviderType.GEMINI, modelId)
         }
 
-        var response = client.sendChatWithBoundedRetry(
-            provider = ProviderType.GEMINI,
-            apiKey = apiKey,
-            modelName = modelId,
-            messages = messages,
-            maxRetries = 1,
-            base64JpegImage = base64JpegImage
+        return RoutedResponse(
+            success = false,
+            replyText = errors.joinToString("\n"),
+            providerUsed = null
         )
-
-        // If a previously cached model was retired/unavailable, automatically re-discover once
-        if (!response.isSuccess && response.errorCategory == ErrorCategory.UNSUPPORTED_MODEL) {
-            val rediscovery = client.discoverAndVerifyGemini(apiKey)
-            if (rediscovery.success && !rediscovery.verifiedModel.isNullOrBlank()) {
-                modelId = rediscovery.verifiedModel
-                preferences.setVerifiedModel(ProviderType.GEMINI, modelId)
-                response = client.sendChatWithBoundedRetry(
-                    provider = ProviderType.GEMINI,
-                    apiKey = apiKey,
-                    modelName = modelId,
-                    messages = messages,
-                    maxRetries = 0,
-                    base64JpegImage = base64JpegImage
-                )
-            }
-        }
-
-        return if (response.isSuccess) {
-            RoutedResponse(
-                success = true,
-                replyText = response.replyText,
-                providerUsed = ProviderType.GEMINI
-            )
-        } else {
-            RoutedResponse(
-                success = false,
-                replyText = response.errorMessage,
-                providerUsed = null
-            )
-        }
     }
 }

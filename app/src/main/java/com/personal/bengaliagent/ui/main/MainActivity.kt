@@ -28,12 +28,8 @@ import com.personal.bengaliagent.screen.ScreenCaptureManager
 import com.personal.bengaliagent.service.AgentAccessibilityService
 import com.personal.bengaliagent.service.AgentForegroundService
 import com.personal.bengaliagent.service.AgentSessionBus
-import com.personal.bengaliagent.ui.coding.CodingProjectActivity
-import com.personal.bengaliagent.ui.media.MediaVideoStudioActivity
-import com.personal.bengaliagent.ui.memory.MemorySettingsActivity
 import com.personal.bengaliagent.ui.settings.ProviderSettingsActivity
 import com.personal.bengaliagent.ui.setup.SetupWizardActivity
-import com.personal.bengaliagent.ui.voice.VoiceSettingsActivity
 import com.personal.bengaliagent.voice.VoiceManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -83,7 +79,7 @@ class MainActivity : AppCompatActivity() {
             isAssistantEnabled = true
             updateState(AgentState.SCREEN_SHARING)
             appendSystemMessage(
-                "Screen sharing enabled. Frames are inspected at reduced resolution only when needed. Tap 'Stop' anytime to end capture.",
+                "Screen sharing active. Open any coding or video editing app and tell me what to do—I will observe your screen and perform the actions directly.",
                 persist = false
             )
             refreshStatusUi()
@@ -165,7 +161,7 @@ class MainActivity : AppCompatActivity() {
                 binding.rvTranscript.scrollToPosition(messages.size - 1)
             } else {
                 appendSystemMessage(
-                    "Welcome to Bengali AI Agent. Connect your Gemini API key in 'AI Connection' to chat in English or Bengali, research online, or run verified phone actions.",
+                    "Welcome to Bengali AI Agent. Tap the ⚙ Settings icon in the top-right corner to connect Gemini, Groq, or OpenRouter and enable AI Coding & Video Editing screen control.",
                     persist = false
                 )
             }
@@ -211,26 +207,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupControls() {
         binding.btnOpenSettings.setOnClickListener {
             startActivity(Intent(this, ProviderSettingsActivity::class.java))
-        }
-
-        binding.btnSetupWizard.setOnClickListener {
-            startActivity(Intent(this, SetupWizardActivity::class.java))
-        }
-
-        binding.btnMemoryBrain.setOnClickListener {
-            startActivity(Intent(this, MemorySettingsActivity::class.java))
-        }
-
-        binding.btnVoiceSettings.setOnClickListener {
-            startActivity(Intent(this, VoiceSettingsActivity::class.java))
-        }
-
-        binding.btnMediaStudio.setOnClickListener {
-            startActivity(Intent(this, MediaVideoStudioActivity::class.java))
-        }
-
-        binding.btnCodingStudio.setOnClickListener {
-            startActivity(Intent(this, CodingProjectActivity::class.java))
         }
 
         binding.btnToggleAssistant.setOnClickListener {
@@ -401,11 +377,17 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (isAutomation || isScreenSharing) {
+                val codingAllowed = prefs.isAiCodingCapabilityEnabled()
+                val videoAllowed = prefs.isAiVideoEditCapabilityEnabled()
                 contextMessages.add(
                     ChatMessage(
                         id = 0L,
                         role = ChatMessage.Role.SYSTEM,
-                        text = AgentPlanner.buildPlannerSystemPrompt(screenObs)
+                        text = AgentPlanner.buildPlannerSystemPrompt(
+                            screenObservation = screenObs,
+                            codingEnabled = codingAllowed,
+                            videoEditingEnabled = videoAllowed
+                        )
                     )
                 )
             }
@@ -543,12 +525,12 @@ class MainActivity : AppCompatActivity() {
     private fun refreshStatusUi() {
         binding.tvAgentState.text = currentState.labelEn
         binding.btnToggleAssistant.text =
-            if (isAssistantEnabled) "Assistant: On" else "Enable Assistant"
+            if (isAssistantEnabled) "Active" else "Start"
         binding.btnPauseResume.text =
             if (currentState == AgentState.PAUSED) "Resume" else "Pause"
         binding.btnScreenToggle.text =
-            if (isScreenSharing) "Screen View: On" else "Screen View: Off"
-        binding.btnMicToggle.text = if (isMicMuted) "Muted" else "Live"
+            if (isScreenSharing) "Screen: On" else "Screen: Off"
+        binding.btnMicToggle.text = if (isMicMuted) "🎤 Mic" else "🔴 Live"
 
         val micStatus = if (isMicMuted) "Mic Off" else "Mic Live"
         val screenStatus = if (isScreenSharing) "Screen Live" else "Screen Off"

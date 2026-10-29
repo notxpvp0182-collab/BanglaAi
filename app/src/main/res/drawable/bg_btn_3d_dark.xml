@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 3D Bottom Shadow Base -->
+    <item android:top="4dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#040406" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+    <!-- 3D Dark Metallic Surface with Subtle Red Rim -->
+    <item android:bottom="4dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#27222C"
+                android:centerColor="#1C1821"
+                android:endColor="#120F16"
+                android:type="linear" />
+            <corners android:radius="14dp" />
+            <stroke
+                android:width="1dp"
+                android:color="#4C1D24" />
+        </shape>
+    </item>
+</layer-list>

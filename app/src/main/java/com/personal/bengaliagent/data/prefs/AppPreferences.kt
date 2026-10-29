@@ -65,6 +65,24 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[KEY_CLOUD_CONSENT] = consented }
     }
 
+    suspend fun isAiCodingCapabilityEnabled(): Boolean {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_AI_CODING_ENABLED] ?: true
+    }
+
+    suspend fun setAiCodingCapabilityEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_AI_CODING_ENABLED] = enabled }
+    }
+
+    suspend fun isAiVideoEditCapabilityEnabled(): Boolean {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_AI_VIDEO_EDIT_ENABLED] ?: true
+    }
+
+    suspend fun setAiVideoEditCapabilityEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_AI_VIDEO_EDIT_ENABLED] = enabled }
+    }
+
     suspend fun getVoiceLanguageTag(): String {
         val prefs = context.dataStore.data.first()
         return prefs[KEY_VOICE_LANG] ?: "bn-BD"
@@ -123,6 +141,8 @@ class AppPreferences(private val context: Context) {
         private val KEY_PREFERRED_PROVIDER = stringPreferencesKey("preferred_provider")
         private val KEY_LAST_CONNECTION_MSG = stringPreferencesKey("last_connection_msg")
         private val KEY_CLOUD_CONSENT = booleanPreferencesKey("cloud_consent")
+        private val KEY_AI_CODING_ENABLED = booleanPreferencesKey("ai_coding_capability_enabled")
+        private val KEY_AI_VIDEO_EDIT_ENABLED = booleanPreferencesKey("ai_video_edit_capability_enabled")
         private val KEY_VOICE_LANG = stringPreferencesKey("voice_lang_tag")
         private val KEY_TTS_AUTO_SPEAK = booleanPreferencesKey("tts_auto_speak")
         private val KEY_SPEAKER_DETECTION_ENABLED = booleanPreferencesKey("speaker_detection_enabled")

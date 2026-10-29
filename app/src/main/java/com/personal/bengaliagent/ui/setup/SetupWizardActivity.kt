@@ -1,6 +1,7 @@
 package com.personal.bengaliagent.ui.setup
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -12,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.personal.bengaliagent.AgentApp
+import com.personal.bengaliagent.R
 import com.personal.bengaliagent.databinding.ActivitySetupWizardBinding
 import com.personal.bengaliagent.service.AgentAccessibilityService
 import com.personal.bengaliagent.ui.settings.ProviderSettingsActivity
@@ -81,16 +83,36 @@ class SetupWizardActivity : AppCompatActivity() {
         refreshPermissionDashboard()
     }
 
+    /**
+     * Checks both the live service instance AND Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+     * so the user immediately sees an accurate ACTIVE / INACTIVE status upon returning from Settings.
+     */
+    private fun isAccessibilityEnabledInSystem(): Boolean {
+        if (AgentAccessibilityService.isServiceEnabled()) return true
+        val expectedComponent = ComponentName(this, AgentAccessibilityService::class.java)
+        val enabledServices = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabledServices.split(':').any {
+            ComponentName.unflattenFromString(it)?.equals(expectedComponent) == true
+        }
+    }
+
     private fun refreshPermissionDashboard() {
+        val green = ContextCompat.getColor(this, R.color.accent_green)
+        val red = ContextCompat.getColor(this, R.color.accent_red_bright)
+
         val micGranted = ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
         binding.tvMicStatus.text = if (micGranted) {
-            "1. Microphone Permission: Granted"
+            "1. Microphone Permission: ● ACTIVE (Granted)"
         } else {
-            "1. Microphone Permission: Not Granted (Optional)"
+            "1. Microphone Permission: ○ INACTIVE (Tap below to grant)"
         }
+        binding.tvMicStatus.setTextColor(if (micGranted) green else red)
 
         val notifGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
@@ -101,23 +123,26 @@ class SetupWizardActivity : AppCompatActivity() {
             true
         }
         binding.tvNotifStatus.text = if (notifGranted) {
-            "2. Notification Permission: Granted"
+            "2. Notification Permission: ● ACTIVE (Granted)"
         } else {
-            "2. Notification Permission: Not Granted (Optional)"
+            "2. Notification Permission: ○ INACTIVE (Tap below to grant)"
         }
+        binding.tvNotifStatus.setTextColor(if (notifGranted) green else red)
 
-        val accEnabled = AgentAccessibilityService.isServiceEnabled()
+        val accEnabled = isAccessibilityEnabledInSystem()
         binding.tvAccessibilityStatus.text = if (accEnabled) {
-            "3. Accessibility Service: Active"
+            "3. Accessibility Service: ● ACTIVE (Enabled)"
         } else {
-            "3. Accessibility Service: Disabled (Optional)"
+            "3. Accessibility Service: ○ INACTIVE (Tap below to enable)"
         }
+        binding.tvAccessibilityStatus.setTextColor(if (accEnabled) green else red)
 
         val overlayGranted = Settings.canDrawOverlays(this)
         binding.tvOverlayStatus.text = if (overlayGranted) {
-            "4. Overlay Permission: Granted"
+            "4. Floating Overlay Bar: ● ACTIVE (Granted)"
         } else {
-            "4. Overlay Permission: Disabled (Optional)"
+            "4. Floating Overlay Bar: ○ INACTIVE (Optional)"
         }
+        binding.tvOverlayStatus.setTextColor(if (overlayGranted) green else red)
     }
 }
