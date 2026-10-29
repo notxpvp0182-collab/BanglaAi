@@ -1,0 +1,68 @@
+package com.personal.bengaliagent.ui.main
+
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.RecyclerView
+import com.personal.bengaliagent.R
+import com.personal.bengaliagent.databinding.ItemChatMessageBinding
+import com.personal.bengaliagent.domain.model.ChatMessage
+
+class TranscriptAdapter : RecyclerView.Adapter<TranscriptAdapter.MessageViewHolder>() {
+
+    private val items = ArrayList<ChatMessage>()
+
+    fun submitList(newItems: List<ChatMessage>) {
+        items.clear()
+        // Keep bounded memory footprint in UI list (max 100 recent messages)
+        val bounded = if (newItems.size > 100) newItems.takeLast(100) else newItems
+        items.addAll(bounded)
+        notifyDataSetChanged()
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
+        val binding = ItemChatMessageBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        return MessageViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
+        holder.bind(items[position])
+    }
+
+    override fun getItemCount(): Int = items.size
+
+    class MessageViewHolder(
+        private val binding: ItemChatMessageBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
+
+        fun bind(msg: ChatMessage) {
+            val ctx = binding.root.context
+            when (msg.role) {
+                ChatMessage.Role.USER -> {
+                    binding.tvSenderHeader.text = "আপনি (You)"
+                    binding.tvSenderHeader.setTextColor(
+                        ContextCompat.getColor(ctx, R.color.accent_blue)
+                    )
+                }
+                ChatMessage.Role.ASSISTANT -> {
+                    val badge = if (msg.providerUsed != null) " [${msg.providerUsed}]" else ""
+                    binding.tvSenderHeader.text = "সহকারী (Agent)$badge"
+                    binding.tvSenderHeader.setTextColor(
+                        ContextCompat.getColor(ctx, R.color.accent_green)
+                    )
+                }
+                ChatMessage.Role.SYSTEM -> {
+                    binding.tvSenderHeader.text = "সিস্টেম বার্তা (System)"
+                    binding.tvSenderHeader.setTextColor(
+                        ContextCompat.getColor(ctx, R.color.accent_amber)
+                    )
+                }
+            }
+            binding.tvMessageBody.text = msg.text
+        }
+    }
+}

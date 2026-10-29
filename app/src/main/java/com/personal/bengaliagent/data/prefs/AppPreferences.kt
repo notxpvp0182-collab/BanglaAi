@@ -1,0 +1,136 @@
+package com.personal.bengaliagent.data.prefs
+
+import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.personal.bengaliagent.domain.model.ProviderType
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+
+private val Context.dataStore by preferencesDataStore(name = "agent_settings")
+
+class AppPreferences(private val context: Context) {
+
+    val isSetupCompleted: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SETUP_COMPLETED] ?: false
+    }
+
+    suspend fun setSetupCompleted(completed: Boolean) {
+        context.dataStore.edit { it[KEY_SETUP_COMPLETED] = completed }
+    }
+
+    suspend fun getPreferredProvider(): ProviderType {
+        val prefs = context.dataStore.data.first()
+        return ProviderType.fromId(prefs[KEY_PREFERRED_PROVIDER] ?: ProviderType.GEMINI.id)
+    }
+
+    suspend fun setPreferredProvider(provider: ProviderType) {
+        context.dataStore.edit { it[KEY_PREFERRED_PROVIDER] = provider.id }
+    }
+
+    suspend fun getFailoverOrder(): List<ProviderType> {
+        val prefs = context.dataStore.data.first()
+        val raw = prefs[KEY_FAILOVER_ORDER] ?: "gemini,groq,openrouter"
+        val parsed = raw.split(",")
+            .mapNotNull { id -> ProviderType.entries.firstOrNull { it.id == id.trim() } }
+            .distinct()
+        return if (parsed.isEmpty()) ProviderType.entries.toList() else parsed
+    }
+
+    suspend fun setFailoverOrder(order: List<ProviderType>) {
+        context.dataStore.edit {
+            it[KEY_FAILOVER_ORDER] = order.joinToString(",") { p -> p.id }
+        }
+    }
+
+    suspend fun getSelectedModel(provider: ProviderType): String {
+        val prefs = context.dataStore.data.first()
+        return prefs[modelKey(provider)] ?: provider.defaultRecommendedModel
+    }
+
+    suspend fun setSelectedModel(provider: ProviderType, modelName: String) {
+        context.dataStore.edit {
+            it[modelKey(provider)] = modelName.trim()
+        }
+    }
+
+    suspend fun isCloudSharingConsented(): Boolean {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_CLOUD_CONSENT] ?: true
+    }
+
+    suspend fun setCloudSharingConsented(consented: Boolean) {
+        context.dataStore.edit { it[KEY_CLOUD_CONSENT] = consented }
+    }
+
+    // --- Milestone 3: Voice & Speaker Preferences ---
+    suspend fun getVoiceLanguageTag(): String {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_VOICE_LANG] ?: "bn-BD"
+    }
+
+    suspend fun setVoiceLanguageTag(tag: String) {
+        context.dataStore.edit { it[KEY_VOICE_LANG] = tag }
+    }
+
+    suspend fun isTtsAutoSpeakEnabled(): Boolean {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_TTS_AUTO_SPEAK] ?: true
+    }
+
+    suspend fun setTtsAutoSpeakEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_TTS_AUTO_SPEAK] = enabled }
+    }
+
+    suspend fun isSpeakerDetectionEnabled(): Boolean {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_SPEAKER_DETECTION_ENABLED] ?: false
+    }
+
+    suspend fun setSpeakerDetectionEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SPEAKER_DETECTION_ENABLED] = enabled }
+    }
+
+    suspend fun getEnrolledSpeakerEmbedding(): String? {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_SPEAKER_EMBEDDING]
+    }
+
+    suspend fun setEnrolledSpeakerEmbedding(serialized: String?) {
+        context.dataStore.edit {
+            if (serialized.isNullOrBlank()) {
+                it.remove(KEY_SPEAKER_EMBEDDING)
+            } else {
+                it[KEY_SPEAKER_EMBEDDING] = serialized
+            }
+        }
+    }
+
+    // --- Milestone 4: Memory Retention ---
+    suspend fun getMemoryRetentionDays(): Int {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_MEMORY_RETENTION_DAYS] ?: 90
+    }
+
+    suspend fun setMemoryRetentionDays(days: Int) {
+        context.dataStore.edit { it[KEY_MEMORY_RETENTION_DAYS] = days }
+    }
+
+    private fun modelKey(provider: ProviderType) = stringPreferencesKey("selected_model_${provider.id}")
+
+    companion object {
+        private val KEY_SETUP_COMPLETED = booleanPreferencesKey("setup_completed")
+        private val KEY_PREFERRED_PROVIDER = stringPreferencesKey("preferred_provider")
+        private val KEY_FAILOVER_ORDER = stringPreferencesKey("failover_order")
+        private val KEY_CLOUD_CONSENT = booleanPreferencesKey("cloud_consent")
+        private val KEY_VOICE_LANG = stringPreferencesKey("voice_lang_tag")
+        private val KEY_TTS_AUTO_SPEAK = booleanPreferencesKey("tts_auto_speak")
+        private val KEY_SPEAKER_DETECTION_ENABLED = booleanPreferencesKey("speaker_detection_enabled")
+        private val KEY_SPEAKER_EMBEDDING = stringPreferencesKey("speaker_embedding_vec")
+        private val KEY_MEMORY_RETENTION_DAYS = intPreferencesKey("memory_retention_days")
+    }
+}

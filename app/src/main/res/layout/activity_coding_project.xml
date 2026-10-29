@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_black"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="কোডিং, প্রজেক্ট ও Termux স্টুডিও"
+            android:textColor="@color/accent_green"
+            android:textSize="19sp"
+            android:textStyle="bold" />
+
+        <!-- SAF Project Folder & File Creator -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="১. প্রজেক্ট ফোল্ডার ও সোর্স ফাইল তৈরি (SAF)"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnSelectProjectFolder"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="6dp"
+                android:backgroundTint="@color/accent_blue"
+                android:text="প্রজেক্ট ফোল্ডার নির্বাচন করুন (Select Folder)" />
+
+            <TextView
+                android:id="@+id/tvSelectedFolder"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="ফোল্ডার: নির্বাচন করা হয়নি"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etFileName"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="6dp"
+                android:hint="ফাইলের নাম (যেমন: main.py বা index.html)"
+                android:text="main.py"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/etCodeContent"
+                android:layout_width="match_parent"
+                android:layout_height="150dp"
+                android:layout_marginTop="6dp"
+                android:background="@color/bg_surface"
+                android:gravity="top|start"
+                android:hint="এখানে কোড লিখুন বা এআই দিয়ে জেনারেট করুন..."
+                android:inputType="textMultiLine|textNoSuggestions"
+                android:padding="8dp"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                android:typeface="monospace" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnGenerateCodeAi"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="@color/bg_surface"
+                    android:text="AI দিয়ে কোড তৈরি"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnSaveCodeFile"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="@color/accent_green"
+                    android:text="ফাইল সংরক্ষণ করুন"
+                    android:textColor="@color/bg_black"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Termux Command Verification Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="২. Termux শেল কমান্ড (ব্যবহারকারীর অনুমোদন আবশ্যক)"
+                android:textColor="@color/accent_amber"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/etShellCommand"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:hint="যেমন: python3 main.py"
+                android:text="python3 main.py"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:typeface="monospace" />
+
+            <Button
+                android:id="@+id/btnReviewAndRunTermux"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:backgroundTint="@color/accent_blue"
+                android:text="কমান্ড যাচাই করুন ও Termux খুলুন" />
+
+            <TextView
+                android:id="@+id/tvCodingStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="অবস্থা: প্রস্তুত"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnCloseCodingStudio"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="@color/bg_surface"
+            android:text="ফিরে যান" />
+
+    </LinearLayout>
+</ScrollView>

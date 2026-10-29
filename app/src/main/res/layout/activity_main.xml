@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_black"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Top Status & Privacy Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_card"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/tvAgentState"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="প্রস্তুত (Ready)"
+            android:textColor="@color/accent_green"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvPrivacyIndicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_badge"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:text="মাইক ও স্ক্রিন বন্ধ"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnOpenSettings"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="API ও সেটিংস"
+            android:textColor="@color/accent_blue"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Primary Session & Feature Controls Row -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnToggleAssistant"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:backgroundTint="@color/accent_green"
+                android:text="সহকারী চালু"
+                android:textColor="@color/bg_black"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnPauseResume"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:backgroundTint="@color/bg_card"
+                android:text="বিরতি (Pause)"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnStopTask"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:backgroundTint="@color/accent_red"
+                android:text="থামুন (Stop)"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnScreenToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:backgroundTint="@color/bg_card"
+                android:text="স্ক্রিন ভিউ: বন্ধ"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnMemoryBrain"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:backgroundTint="@color/bg_card"
+                android:text="মেমোরি (Brain)"
+                android:textColor="@color/accent_green"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnVoiceSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:backgroundTint="@color/bg_card"
+                android:text="ভয়েস ও কণ্ঠ"
+                android:textColor="@color/accent_blue"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnMediaStudio"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:backgroundTint="@color/bg_card"
+                android:text="ভিডিও স্টুডিও"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnCodingStudio"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="6dp"
+                android:backgroundTint="@color/bg_card"
+                android:text="কোডিং ও Termux"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnSetupWizard"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:backgroundTint="@color/bg_card"
+                android:text="অনুমতি ড্যাশবোর্ড"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Conversation Transcript -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvTranscript"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:layout_weight="1"
+        android:background="@drawable/bg_card"
+        android:padding="8dp" />
+
+    <!-- Bottom Input & Mic Control Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnMicToggle"
+            android:layout_width="52dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
+            android:backgroundTint="@color/bg_card"
+            android:text="🔇"
+            android:textSize="18sp" />
+
+        <EditText
+            android:id="@+id/etUserInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/bg_card"
+            android:hint="বাংলায় বা ইংরেজিতে লিখুন..."
+            android:inputType="textMultiLine"
+            android:maxLines="4"
+            android:minHeight="48dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="10dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btnSend"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginStart="6dp"
+            android:backgroundTint="@color/accent_blue"
+            android:text="পাঠান"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_black"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="মিডিয়া ও ভিডিও স্টুডিও (Non-Destructive)"
+            android:textColor="@color/accent_green"
+            android:textSize="19sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="আপনার মূল ভিডিও ফাইলটি কখনোই পরিবর্তন বা মুছে ফেলা হয় না। সব এডিট নতুন ফাইলে সংরক্ষিত হয়।"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnPickVideo"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="10dp"
+            android:backgroundTint="@color/accent_blue"
+            android:text="গ্যালারি থেকে ভিডিও নির্বাচন করুন (Photo Picker)"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold" />
+
+        <!-- Preview & Metadata Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <ImageView
+                android:id="@+id/ivVideoPreview"
+                android:layout_width="match_parent"
+                android:layout_height="170dp"
+                android:background="@color/bg_surface"
+                android:contentDescription="Video Preview Frame"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:id="@+id/tvVideoMetadata"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="কোনো ভিডিও নির্বাচন করা হয়নি"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnPlayExternal"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:text="ভিডিও প্লেয়ারে চালান (Play Video)"
+                android:textColor="@color/accent_green" />
+        </LinearLayout>
+
+        <!-- Trim & Audio Controls Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ট্রিম ও অডিও অপশন (Trim / Mute / Extract / Rotate)"
+                android:textColor="@color/accent_green"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/etStartSec"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:hint="শুরু (সেকেন্ড)"
+                    android:inputType="numberDecimal"
+                    android:text="0"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/etEndSec"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:hint="শেষ (সেকেন্ড)"
+                    android:inputType="numberDecimal"
+                    android:text="10"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <CheckBox
+                android:id="@+id/cbMuteAudio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="অডিও মিউট করুন (Mute Audio)"
+                android:textColor="@color/text_primary" />
+
+            <CheckBox
+                android:id="@+id/cbExtractAudioOnly"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="শুধুমাত্র অডিও এক্সট্র্যাক্ট করুন (.m4a Audio Only)"
+                android:textColor="@color/text_primary" />
+
+            <CheckBox
+                android:id="@+id/cbRotate90"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="৯০ ডিগ্রি ঘোরান (Rotate 90°)"
+                android:textColor="@color/text_primary" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnExportEdited"
+                    android:layout_width="0dp"
+                    android:layout_height="46dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="@color/accent_green"
+                    android:text="নতুন ফাইলে এক্সপোর্ট করুন"
+                    android:textColor="@color/bg_black"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btnCancelEdit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="46dp"
+                    android:backgroundTint="@color/accent_red"
+                    android:text="বাতিল" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvEditStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="অবস্থা: প্রস্তুত"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnCloseMediaStudio"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="@color/bg_surface"
+            android:text="ফিরে যান" />
+
+    </LinearLayout>
+</ScrollView>
