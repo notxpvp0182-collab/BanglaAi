@@ -8,6 +8,8 @@ import android.view.View
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -23,6 +25,7 @@ import com.personal.bengaliagent.ui.voice.VoiceSettingsActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 
 class ProviderSettingsActivity : AppCompatActivity() {
 
@@ -47,29 +50,20 @@ class ProviderSettingsActivity : AppCompatActivity() {
             tvStatus = binding.tvGeminiStatus,
             btnConnect = binding.btnConnectGemini,
             btnDisconnect = binding.btnDisconnectGemini,
-            btnRetry = binding.btnRetryGemini
+            btnRetry = binding.btnRetryGemini,
+            btnInspectCatalog = binding.btnInspectGeminiModels
         )
 
         setupProviderBlock(
-            provider = ProviderType.GROQ,
+            provider = ProviderType.GROK,
             etKey = binding.etGroqKey,
             cbShow = binding.cbShowGroqKey,
             tvBadge = binding.tvGroqBadge,
             tvStatus = binding.tvGroqStatus,
             btnConnect = binding.btnConnectGroq,
             btnDisconnect = binding.btnDisconnectGroq,
-            btnRetry = null
-        )
-
-        setupProviderBlock(
-            provider = ProviderType.OPENROUTER,
-            etKey = binding.etOpenRouterKey,
-            cbShow = binding.cbShowOpenRouterKey,
-            tvBadge = binding.tvOpenRouterBadge,
-            tvStatus = binding.tvOpenRouterStatus,
-            btnConnect = binding.btnConnectOpenRouter,
-            btnDisconnect = binding.btnDisconnectOpenRouter,
-            btnRetry = null
+            btnRetry = null,
+            btnInspectCatalog = binding.btnInspectGrokModels
         )
 
         binding.btnCloseSettings.setOnClickListener { finish() }
@@ -77,9 +71,14 @@ class ProviderSettingsActivity : AppCompatActivity() {
 
     private fun setupCapabilityTogglesAndNavigation() {
         lifecycleScope.launch {
+            binding.cbAutoModelSelection.isChecked = prefs.isAutoModelSelectionEnabled()
             binding.cbAiCodingCapability.isChecked = prefs.isAiCodingCapabilityEnabled()
             binding.cbAiVideoCapability.isChecked = prefs.isAiVideoEditCapabilityEnabled()
             binding.cbCloudConsent.isChecked = prefs.isCloudSharingConsented()
+        }
+
+        binding.cbAutoModelSelection.setOnCheckedChangeListener { _, isChecked ->
+            lifecycleScope.launch { prefs.setAutoModelSelectionEnabled(isChecked) }
         }
 
         binding.cbAiCodingCapability.setOnCheckedChangeListener { _, isChecked ->
@@ -115,28 +114,33 @@ class ProviderSettingsActivity : AppCompatActivity() {
         tvStatus: TextView,
         btnConnect: View,
         btnDisconnect: View,
-        btnRetry: View?
+        btnRetry: View?,
+        btnInspectCatalog: View
     ) {
         val existingKey = keyStore.getApiKey(provider)
         if (!existingKey.isNullOrBlank()) {
             etKey.setText(existingKey)
         }
 
-        val isVerified = keyStore.isProviderVerified(provider)
-        if (isVerified) {
-            renderConnectionState(
-                tvBadge,
-                tvStatus,
-                state = ConnectionState.CONNECTED,
-                detail = "Connected and verified (${provider.displayName})"
-            )
-        } else {
-            renderConnectionState(
-                tvBadge,
-                tvStatus,
-                state = ConnectionState.DISCONNECTED,
-                detail = "Enter your ${provider.displayName} API key and tap Connect."
-            )
+        lifecycleScope.launch {
+            val isVerified = keyStore.isProviderVerified(provider)
+            val activeModel = prefs.getVerifiedModel(provider)
+            val voiceModel = prefs.getLiveVoiceModel(provider)
+            if (isVerified && !activeModel.isNullOrBlank()) {
+                renderConnectionState(
+                    tvBadge,
+                    tvStatus,
+                    state = ConnectionState.CONNECTED,
+                    detail = "Active: $activeModel | Voice Call: ${voiceModel ?: activeModel}"
+                )
+            } else {
+                renderConnectionState(
+                    tvBadge,
+                    tvStatus,
+                    state = ConnectionState.DISCONNECTED,
+                    detail = "Enter your ${provider.displayName} API key and tap Connect."
+                )
+            }
         }
 
         cbShow.setOnCheckedChangeListener { _, isChecked ->
@@ -156,7 +160,7 @@ class ProviderSettingsActivity : AppCompatActivity() {
                     tvBadge,
                     tvStatus,
                     state = ConnectionState.AUTHENTICATION_ERROR,
-                    detail = "API key cannot be empty. Please enter your ${provider.displayName} key."
+                    detail = "API key cannot be empty."
                 )
                 return@OnClickListener
             }
@@ -176,10 +180,9 @@ class ProviderSettingsActivity : AppCompatActivity() {
                         } else {
                             ConnectionState.CONNECTING
                         },
-                        detail = "Verifying ${provider.displayName} API key and model availability..."
+                        detail = "Authenticating & discovering ${provider.displayName} models..."
                     )
 
-                    // Hard 15-second timeout prevents infinite "Connecting..." hangs
                     val result = withTimeoutOrNull(15_000L) {
                         router.connectAndVerifyProvider(provider, rawKey)
                     }
@@ -190,7 +193,7 @@ class ProviderSettingsActivity : AppCompatActivity() {
                             tvBadge,
                             tvStatus,
                             state = ConnectionState.NETWORK_ERROR,
-                            detail = "Connection timed out after 15 seconds. Please check your internet connection and tap Retry."
+                            detail = "Connection timed out after 15 seconds. Tap Retry."
                         )
                     } else if (result.success) {
                         btnRetry?.visibility = View.GONE
@@ -220,7 +223,7 @@ class ProviderSettingsActivity : AppCompatActivity() {
                         tvBadge,
                         tvStatus,
                         state = ConnectionState.NETWORK_ERROR,
-                        detail = "Connection error: ${e.localizedMessage ?: e.javaClass.simpleName}"
+                        detail = "Error: ${e.localizedMessage ?: e.javaClass.simpleName}"
                     )
                 } finally {
                     btnConnect.isEnabled = true
@@ -234,6 +237,10 @@ class ProviderSettingsActivity : AppCompatActivity() {
 
         btnConnect.setOnClickListener(connectAction)
         btnRetry?.setOnClickListener(connectAction)
+
+        btnInspectCatalog.setOnClickListener {
+            showDiscoveredModelCatalogDialog(provider, tvStatus)
+        }
 
         btnDisconnect.setOnClickListener {
             connectJob?.cancel()
@@ -251,6 +258,53 @@ class ProviderSettingsActivity : AppCompatActivity() {
                     detail = "Disconnected from ${provider.displayName}."
                 )
             }
+        }
+    }
+
+    private fun showDiscoveredModelCatalogDialog(provider: ProviderType, tvStatus: TextView) {
+        lifecycleScope.launch {
+            val cachedJson = prefs.getCachedModelsJson(provider)
+            if (cachedJson.isNullOrBlank()) {
+                Toast.makeText(
+                    this@ProviderSettingsActivity,
+                    "Connect ${provider.displayName} first to load its live model catalog.",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+
+            val arr = runCatching { JSONArray(cachedJson) }.getOrNull() ?: return@launch
+            if (arr.length() == 0) return@launch
+
+            val labels = Array(arr.length()) { i ->
+                val obj = arr.getJSONObject(i)
+                val id = obj.optString("id")
+                val speed = obj.optString("speedTier", "Fast")
+                val live = if (obj.optBoolean("supportsLiveAudio")) "Live Audio ✓" else "Text/Vision"
+                val vision = if (obj.optBoolean("supportsVision")) "Vision ✓" else ""
+                "$id\n[$speed • $live • $vision]"
+            }
+
+            AlertDialog.Builder(this@ProviderSettingsActivity)
+                .setTitle("${provider.displayName} — Discovered Models")
+                .setItems(labels) { _, which ->
+                    val chosenObj = arr.getJSONObject(which)
+                    val chosenId = chosenObj.optString("id")
+                    val supportsLive = chosenObj.optBoolean("supportsLiveAudio", false)
+                    lifecycleScope.launch {
+                        prefs.setAutoModelSelectionEnabled(false)
+                        binding.cbAutoModelSelection.isChecked = false
+                        prefs.setVerifiedModel(provider, chosenId)
+                        if (supportsLive) {
+                            prefs.setLiveVoiceModel(provider, chosenId)
+                        }
+                        prefs.setPreferredProvider(provider)
+                        val voiceModel = prefs.getLiveVoiceModel(provider) ?: chosenId
+                        tvStatus.text = "Selected: $chosenId | Voice Call: $voiceModel"
+                    }
+                }
+                .setNegativeButton("Close", null)
+                .show()
         }
     }
 

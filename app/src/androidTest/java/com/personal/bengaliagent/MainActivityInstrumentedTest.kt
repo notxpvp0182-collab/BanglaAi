@@ -11,7 +11,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.personal.bengaliagent.ui.main.MainActivity
 import com.personal.bengaliagent.ui.settings.ProviderSettingsActivity
 import com.personal.bengaliagent.ui.setup.SetupWizardActivity
-import org.hamcrest.CoreMatchers.containsString
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -27,7 +26,7 @@ class MainActivityInstrumentedTest {
     }
 
     @Test
-    fun aiConnectionScreenDisplaysEnglishLabelsAndConnectButton() {
+    fun aiConnectionScreenDisplaysGeminiAndGrokProviders() {
         ActivityScenario.launch(ProviderSettingsActivity::class.java).use {
             onView(withId(R.id.tvAiConnectionTitle)).check(matches(withText("AI Connection")))
             onView(withId(R.id.tvProviderLabel)).check(matches(withText("Google Gemini")))
@@ -36,14 +35,10 @@ class MainActivityInstrumentedTest {
     }
 
     @Test
-    fun mainScreenDisplaysEnglishControlsAndStopButtonImmediatelyCancelsTasks() {
+    fun mainCallingScreenDisplaysOrbAndCallAiButton() {
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withId(R.id.tvAgentState)).check(matches(isDisplayed()))
-            onView(withId(R.id.btnStopTask)).check(matches(isDisplayed()))
-            onView(withId(R.id.btnPauseResume)).perform(click())
-            onView(withId(R.id.tvAgentState)).check(matches(withText(containsString("Paused"))))
-            onView(withId(R.id.btnStopTask)).perform(click())
-            onView(withId(R.id.tvAgentState)).check(matches(withText(containsString("Ready"))))
+            onView(withId(R.id.btnStartAiCall)).check(matches(isDisplayed()))
+            onView(withId(R.id.flHomeOrbContainer)).check(matches(isDisplayed()))
         }
     }
 }

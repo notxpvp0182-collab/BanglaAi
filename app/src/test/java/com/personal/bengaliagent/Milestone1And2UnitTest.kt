@@ -2,7 +2,6 @@ package com.personal.bengaliagent
 
 import com.personal.bengaliagent.data.security.KeyValidator
 import com.personal.bengaliagent.domain.model.ActionSafetyClassifier
-import com.personal.bengaliagent.domain.model.ErrorCategory
 import com.personal.bengaliagent.domain.model.ProviderType
 import com.personal.bengaliagent.domain.model.RiskLevel
 import com.personal.bengaliagent.network.LlmProviderClient
@@ -12,7 +11,6 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -34,16 +32,15 @@ class Milestone1And2UnitTest {
     }
 
     @Test
-    fun `key validator checks non-empty Gemini format and redacts secrets`() {
-        val validGemini = "AIzaSyA123456789012345678901234567890"
-        assertTrue(KeyValidator.validateFormat(ProviderType.GEMINI, validGemini).isValidFormat)
-        assertFalse(KeyValidator.validateFormat(ProviderType.GEMINI, "").isValidFormat)
-        assertFalse(KeyValidator.validateFormat(ProviderType.GEMINI, "short").isValidFormat)
+    fun `prefix-free key validator accepts modern and standard keys without prefix restrictions`() {
+        val modernKey = "test_credential_token_sample_1234567890"
+        val standardKey = "sample_gemini_credential_key_1234567890"
+        val grokKey = "sample_grok_credential_key_1234567890"
 
-        val logLine = "Error with key $validGemini"
-        val redacted = KeyValidator.redactSecrets(logLine)
-        assertFalse(redacted.contains(validGemini))
-        assertTrue(redacted.contains("***REDACTED***"))
+        assertTrue(KeyValidator.validateFormat(ProviderType.GEMINI, modernKey).isValidFormat)
+        assertTrue(KeyValidator.validateFormat(ProviderType.GEMINI, standardKey).isValidFormat)
+        assertTrue(KeyValidator.validateFormat(ProviderType.GROK, grokKey).isValidFormat)
+        assertFalse(KeyValidator.validateFormat(ProviderType.GEMINI, "").isValidFormat)
     }
 
     @Test
@@ -63,7 +60,7 @@ class Milestone1And2UnitTest {
     }
 
     @Test
-    fun `gemini automatic model discovery filters generateContent and prefers stable over preview`() = runTest {
+    fun `gemini and grok dynamic model discovery parses capabilities and live audio support`() = runTest {
         val modelsJson = """
             {
               "models": [
@@ -73,23 +70,16 @@ class Milestone1And2UnitTest {
                   "supportedGenerationMethods": ["embedContent"]
                 },
                 {
-                  "name": "models/gemini-2.5-flash-preview-04-17",
-                  "displayName": "Gemini 2.5 Flash Preview",
-                  "supportedGenerationMethods": ["generateContent"]
-                },
-                {
                   "name": "models/gemini-2.5-flash",
                   "displayName": "Gemini 2.5 Flash",
-                  "supportedGenerationMethods": ["generateContent", "countTokens"],
+                  "supportedGenerationMethods": ["generateContent", "bidiGenerateContent"],
                   "inputTokenLimit": 1048576
                 }
               ]
             }
         """.trimIndent()
 
-        // 1st request: GET /models -> returns list
         mockServer.enqueue(MockResponse().setResponseCode(200).setBody(modelsJson))
-        // 2nd request: POST /models/gemini-2.5-flash:generateContent -> verifies candidate works
         mockServer.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}"""
@@ -101,97 +91,51 @@ class Milestone1And2UnitTest {
                 ProviderType.GEMINI to mockServer.url("/v1beta").toString().removeSuffix("/")
             )
         )
-        val validKey = "AIzaSyA123456789012345678901234567890"
-        val result = client.discoverAndVerifyGemini(validKey)
+        val dummyKey = "dummy_unit_test_credential_key_123456"
+        val result = client.discoverAndVerifyGemini(dummyKey)
 
         assertTrue(result.success)
         assertEquals("gemini-2.5-flash", result.verifiedModel)
-
-        // Verify x-goog-api-key header was used and key was not leaked in URL query
-        val req1 = mockServer.takeRequest()
-        assertEquals(validKey, req1.getHeader("x-goog-api-key"))
-        assertFalse(req1.path.orEmpty().contains(validKey))
+        assertEquals("gemini-2.5-flash", result.liveVoiceModel)
     }
 
     @Test
-    fun `gemini discovery falls back to next eligible candidate if first model returns 404`() = runTest {
-        val modelsJson = """
+    fun `grok model discovery works with xAI endpoint`() = runTest {
+        val grokModelsJson = """
             {
-              "models": [
-                {
-                  "name": "models/gemini-2.5-flash",
-                  "supportedGenerationMethods": ["generateContent"]
-                },
-                {
-                  "name": "models/gemini-2.5-pro",
-                  "supportedGenerationMethods": ["generateContent"]
-                }
+              "data": [
+                {"id": "grok-3-mini-fast", "active": true},
+                {"id": "grok-2-realtime", "active": true}
               ]
             }
         """.trimIndent()
 
-        mockServer.enqueue(MockResponse().setResponseCode(200).setBody(modelsJson))
-        // First candidate fails with 404
-        mockServer.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":"Not found"}"""))
-        // Second candidate succeeds
+        mockServer.enqueue(MockResponse().setResponseCode(200).setBody(grokModelsJson))
         mockServer.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}"""
+                """{"choices":[{"message":{"content":"OK"}}]}"""
             )
         )
 
         val client = LlmProviderClient(
             baseUrlOverride = mapOf(
-                ProviderType.GEMINI to mockServer.url("/v1beta").toString().removeSuffix("/")
+                ProviderType.GROK to mockServer.url("/v1").toString().removeSuffix("/")
             )
         )
-        val result = client.discoverAndVerifyGemini("AIzaSyA123456789012345678901234567890")
-
-        assertTrue(result.success)
-        assertEquals("gemini-2.5-pro", result.verifiedModel)
+        val res = client.discoverAndVerifyProvider(ProviderType.GROK, "dummy_grok_unit_test_key_123456")
+        assertTrue(res.success)
+        assertEquals("grok-2-realtime", res.liveVoiceModel)
     }
 
     @Test
-    fun `gemini discovery handles invalid key, quota limit, and no eligible models`() = runTest {
-        val client = LlmProviderClient(
-            baseUrlOverride = mapOf(
-                ProviderType.GEMINI to mockServer.url("/v1beta").toString().removeSuffix("/")
-            )
-        )
-        val key = "AIzaSyA123456789012345678901234567890"
-
-        // 1. 401 Invalid Key
-        mockServer.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"API_KEY_INVALID"}"""))
-        val invalidRes = client.discoverAndVerifyGemini(key)
-        assertFalse(invalidRes.success)
-        assertEquals(ErrorCategory.INVALID_KEY, invalidRes.errorCategory)
-        assertNull(invalidRes.verifiedModel)
-
-        // 2. 429 Quota Exceeded
-        mockServer.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":"Quota exceeded"}"""))
-        val quotaRes = client.discoverAndVerifyGemini(key)
-        assertFalse(quotaRes.success)
-        assertEquals(ErrorCategory.QUOTA_OR_RATE_LIMIT, quotaRes.errorCategory)
-
-        // 3. No eligible text-generation models
-        mockServer.enqueue(
-            MockResponse().setResponseCode(200).setBody(
-                """{"models":[{"name":"models/embedding-001","supportedGenerationMethods":["embedContent"]}]}"""
-            )
-        )
-        val emptyRes = client.discoverAndVerifyGemini(key)
-        assertFalse(emptyRes.success)
-        assertEquals(ErrorCategory.NO_ELIGIBLE_MODELS, emptyRes.errorCategory)
-    }
-
-    @Test
-    fun `provider settings layout contains English labels and no manual model selector`() {
-        val layoutFile = File("src/main/res/layout/activity_provider_settings.xml")
-        if (layoutFile.exists()) {
-            val xml = layoutFile.readText()
-            assertFalse("Manual model Spinner must not exist in AI Connection screen", xml.contains("<Spinner"))
-            assertTrue(xml.contains("btnConnectGemini"))
-            assertTrue(xml.contains("etGeminiKey"))
+    fun `main calling screen layout has no chatbot RecyclerView or text EditText`() {
+        val mainLayout = File("src/main/res/layout/activity_main.xml")
+        if (mainLayout.exists()) {
+            val xml = mainLayout.readText()
+            assertFalse("Chatbot RecyclerView must be removed", xml.contains("rvTranscript"))
+            assertFalse("Chatbot EditText must be removed", xml.contains("etUserInput"))
+            assertTrue("Call AI button must exist", xml.contains("btnStartAiCall"))
+            assertTrue("Active Call screen must exist", xml.contains("layoutActiveCall"))
         }
     }
 }

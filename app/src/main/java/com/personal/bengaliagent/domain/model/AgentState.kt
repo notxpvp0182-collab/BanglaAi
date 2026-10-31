@@ -1,17 +1,22 @@
 package com.personal.bengaliagent.domain.model
 
 enum class AgentState(val labelBn: String, val labelEn: String) {
-    READY("Idle • Ready", "Idle • Ready"),
+    READY("Idle", "Idle"),
+    CALLING("Calling...", "Calling..."),
+    CONNECTING("Connecting...", "Connecting..."),
+    CONNECTED("Connected", "Connected"),
     LISTENING("Listening...", "Listening..."),
-    PROCESSING("Processing Speech...", "Processing Speech..."),
+    PROCESSING("Processing...", "Processing..."),
     THINKING("Thinking...", "Thinking..."),
     ACTING("Executing Action...", "Executing Action..."),
     SPEAKING("Speaking...", "Speaking..."),
-    PAUSED("Paused", "Paused"),
+    RECONNECTING("Reconnecting...", "Reconnecting..."),
+    PAUSED("Muted", "Muted"),
     MUTED("Mic Muted", "Mic Muted"),
     SCREEN_SHARING("Screen Sharing Active", "Screen Sharing Active"),
-    OFFLINE("Disconnected • Offline", "Disconnected • Offline"),
-    ERROR("Error • Attention Required", "Error • Attention Required")
+    CALL_ENDED("Call Ended", "Call Ended"),
+    OFFLINE("Connection Failed", "Connection Failed"),
+    ERROR("Connection Failed", "Connection Failed")
 }
 
 enum class ConnectionState(val displayLabel: String) {

@@ -19,12 +19,10 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Multi-Provider Client with priority auto-selection for:
- * 1. gemini-3.8-flash
- * 2. gemini-3.6-flash
- * 3. gemini-3.5-flash-lite
- * 4. gemini-3.1-flash-lite
- * Automatically connects to the latest available model that responds to the user's API key.
+ * Dynamic Model Discovery & Fast Connection Engine for Google Gemini and xAI Grok.
+ * - Accepts any credential string without legacy prefix restrictions.
+ * - Discovers available models dynamically from GET /v1beta/models (Gemini) and GET /v1/models (xAI Grok).
+ * - Evaluates Live Audio (bidiGenerateContent / Realtime), Vision, and Tool capabilities.
  */
 class LlmProviderClient(
     private val httpClient: OkHttpClient = defaultHttpClient(),
@@ -57,7 +55,12 @@ class LlmProviderClient(
             )
         }
 
-        val url = "${baseUrl(provider)}/models"
+        val url = if (provider == ProviderType.GEMINI) {
+            "${baseUrl(provider)}/models?key=$trimmedKey"
+        } else {
+            "${baseUrl(provider)}/models"
+        }
+
         val reqBuilder = Request.Builder()
             .url(url)
             .addHeader("Accept", "application/json")
@@ -96,7 +99,7 @@ class LlmProviderClient(
                     return@withContext DiscoveryResponse(
                         eligibleModels = emptyList(),
                         errorCategory = ErrorCategory.NO_ELIGIBLE_MODELS,
-                        errorMessage = "No compatible text-generation models found for this ${provider.displayName} key."
+                        errorMessage = "No compatible models found for this ${provider.displayName} key."
                     )
                 }
 
@@ -108,19 +111,52 @@ class LlmProviderClient(
             DiscoveryResponse(
                 eligibleModels = emptyList(),
                 errorCategory = ErrorCategory.NETWORK_ERROR,
-                errorMessage = "Network error (${e.javaClass.simpleName}): Please check your internet connection."
+                errorMessage = "Network error (${e.javaClass.simpleName}): Please check internet connection."
             )
         }
     }
 
     private fun defaultGeminiFallbackCandidates(): List<DiscoveredModel> = listOf(
-        DiscoveredModel("gemini-3.8-flash", "Gemini 3.8 Flash", listOf("generateContent")),
-        DiscoveredModel("gemini-3.6-flash", "Gemini 3.6 Flash", listOf("generateContent")),
-        DiscoveredModel("gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite", listOf("generateContent")),
-        DiscoveredModel("gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite", listOf("generateContent")),
-        DiscoveredModel("gemini-3.1-flash-lite-preview", "Gemini 3.1 Flash Lite Preview", listOf("generateContent")),
-        DiscoveredModel("gemini-2.5-flash", "Gemini 2.5 Flash", listOf("generateContent")),
-        DiscoveredModel("gemini-2.0-flash", "Gemini 2.0 Flash", listOf("generateContent"))
+        DiscoveredModel(
+            id = "gemini-2.0-flash-exp",
+            displayName = "Gemini 2.0 Flash Live",
+            provider = ProviderType.GEMINI,
+            supportedGenerationMethods = listOf("generateContent", "bidiGenerateContent"),
+            supportsLiveAudio = true,
+            supportsVision = true,
+            supportsTools = true,
+            speedTier = "Ultra-Fast"
+        ),
+        DiscoveredModel(
+            id = "gemini-2.0-flash",
+            displayName = "Gemini 2.0 Flash",
+            provider = ProviderType.GEMINI,
+            supportedGenerationMethods = listOf("generateContent", "bidiGenerateContent"),
+            supportsLiveAudio = true,
+            supportsVision = true,
+            supportsTools = true,
+            speedTier = "Ultra-Fast"
+        ),
+        DiscoveredModel(
+            id = "gemini-2.5-flash",
+            displayName = "Gemini 2.5 Flash",
+            provider = ProviderType.GEMINI,
+            supportedGenerationMethods = listOf("generateContent", "bidiGenerateContent"),
+            supportsLiveAudio = true,
+            supportsVision = true,
+            supportsTools = true,
+            speedTier = "Ultra-Fast"
+        ),
+        DiscoveredModel(
+            id = "gemini-3.5-flash-lite",
+            displayName = "Gemini 3.5 Flash-Lite",
+            provider = ProviderType.GEMINI,
+            supportedGenerationMethods = listOf("generateContent"),
+            supportsLiveAudio = false,
+            supportsVision = true,
+            supportsTools = true,
+            speedTier = "Ultra-Fast"
+        )
     )
 
     fun parseAndRankGeminiModels(rawJson: String): List<DiscoveredModel> {
@@ -131,7 +167,7 @@ class LlmProviderClient(
 
             val excludedKeywords = listOf(
                 "embedding", "imagen", "veo", "aqa", "attribution", "tts",
-                "audio", "robotics", "learnlm", "bison", "gecko", "vision-only", "thinking"
+                "robotics", "learnlm", "bison", "gecko", "vision-only"
             )
 
             for (i in 0 until modelsArr.length()) {
@@ -148,13 +184,33 @@ class LlmProviderClient(
                 for (m in 0 until methodsArr.length()) {
                     methods.add(methodsArr.optString(m, ""))
                 }
-                if (!methods.contains("generateContent")) continue
+                if (!methods.contains("generateContent") && !methods.contains("bidiGenerateContent")) {
+                    continue
+                }
+
+                val supportsBidi = methods.contains("bidiGenerateContent") ||
+                    lowerId.contains("live") ||
+                    lowerId.contains("native-audio") ||
+                    lowerId == "gemini-2.0-flash" ||
+                    lowerId == "gemini-2.0-flash-exp" ||
+                    lowerId.startsWith("gemini-2.5-flash")
+
+                val speed = when {
+                    lowerId.contains("lite") || lowerId.contains("flash") -> "Ultra-Fast"
+                    lowerId.contains("pro") -> "Reasoning"
+                    else -> "Fast"
+                }
 
                 candidates.add(
                     DiscoveredModel(
                         id = id,
                         displayName = obj.optString("displayName", id),
+                        provider = ProviderType.GEMINI,
                         supportedGenerationMethods = methods,
+                        supportsLiveAudio = supportsBidi,
+                        supportsVision = true,
+                        supportsTools = true,
+                        speedTier = speed,
                         inputTokenLimit = obj.optInt("inputTokenLimit", 0),
                         outputTokenLimit = obj.optInt("outputTokenLimit", 0)
                     )
@@ -167,21 +223,8 @@ class LlmProviderClient(
         }
     }
 
-    /**
-     * Ranks models so the user's requested 3.x Flash / Flash-Lite models are always tried first
-     * from newest to oldest, followed by any other available Gemini models.
-     */
     private fun scoreGeminiCandidate(model: DiscoveredModel): Int {
         val id = model.id.lowercase()
-
-        // 1. Explicit priority for user's requested Gemini 3.x models
-        when {
-            id == "gemini-3.8-flash" || id.startsWith("gemini-3.8-flash") -> return 10000
-            id == "gemini-3.6-flash" || id.startsWith("gemini-3.6-flash") -> return 9500
-            id == "gemini-3.5-flash-lite" || id.startsWith("gemini-3.5-flash-lite") -> return 9000
-            id == "gemini-3.1-flash-lite" || id.startsWith("gemini-3.1-flash-lite") -> return 8500
-        }
-
         var score = 0
         val isPreviewOrExp = id.contains("preview") ||
             id.contains("exp") ||
@@ -189,28 +232,24 @@ class LlmProviderClient(
             id.contains("alpha") ||
             id.contains("beta")
 
-        // Prefer newer major.minor versions dynamically (e.g. 3.x > 2.5 > 2.0)
+        if (!isPreviewOrExp) score += 1000
+
+        when {
+            id == "gemini-3.5-flash-lite" -> score += 750
+            id == "gemini-2.5-flash" -> score += 700
+            id == "gemini-2.0-flash" -> score += 650
+            id.contains("flash") && !id.contains("lite") && !id.contains("8b") -> score += 400
+            id.contains("flash-lite") -> score += 350
+            id.contains("pro") -> score += 300
+        }
+
         val versionMatch = Regex("gemini-(\\d+)\\.(\\d+)").find(id)
         if (versionMatch != null) {
             val major = versionMatch.groupValues[1].toIntOrNull() ?: 1
             val minor = versionMatch.groupValues[2].toIntOrNull() ?: 0
-            score += (major * 1000) + (minor * 100)
-        } else if (id.contains("gemini-3")) {
-            score += 3000
-        } else if (id.contains("gemini-2")) {
-            score += 2000
+            score += (major * 100) + (minor * 20)
         }
-
-        if (!isPreviewOrExp) {
-            score += 500
-        }
-
-        when {
-            id.contains("flash") && !id.contains("lite") && !id.contains("8b") -> score += 300
-            id.contains("flash-lite") -> score += 250
-            id.contains("pro") -> score += 200
-        }
-
+        if (model.supportsLiveAudio) score += 40
         if (model.inputTokenLimit >= 100_000) score += 25
         return score
     }
@@ -222,12 +261,9 @@ class LlmProviderClient(
         return try {
             val root = JSONObject(rawJson)
             val dataArr = root.optJSONArray("data") ?: return emptyList()
-            val discoveredIds = mutableSetOf<String>()
+            val discovered = mutableListOf<DiscoveredModel>()
 
-            val excluded = listOf(
-                "whisper", "tts", "embed", "guard", "moderation", "audio",
-                "specdec", "vision-preview", "tool-use", "playai", "orpheus", "allam"
-            )
+            val excluded = listOf("whisper", "tts", "embed", "guard", "moderation")
 
             for (i in 0 until dataArr.length()) {
                 val obj = dataArr.optJSONObject(i) ?: continue
@@ -236,42 +272,48 @@ class LlmProviderClient(
                 if (id.isBlank()) continue
                 val lower = id.lowercase()
                 if (excluded.any { lower.contains(it) }) continue
-                discoveredIds.add(id)
-            }
 
-            val priorityOrder = if (provider == ProviderType.GROQ) {
-                listOf(
-                    "llama-3.3-70b-versatile",
-                    "llama-3.1-8b-instant",
-                    "meta-llama/llama-4-scout-17b-16e-instruct",
-                    "meta-llama/llama-4-maverick-17b-128e-instruct",
-                    "qwen/qwen3-32b",
-                    "gemma2-9b-it",
-                    "mixtral-8x7b-32768"
-                )
-            } else {
-                listOf(
-                    "google/gemini-3.8-flash",
-                    "google/gemini-3.6-flash",
-                    "google/gemini-3.5-flash-lite",
-                    "google/gemini-3.1-flash-lite",
-                    "google/gemini-2.5-flash",
-                    "meta-llama/llama-3.3-70b-instruct",
-                    "openai/gpt-4o-mini"
-                )
-            }
+                val supportsLive = provider == ProviderType.GROK && (
+                    lower.contains("realtime") ||
+                        lower.contains("voice") ||
+                        lower.startsWith("grok-2") ||
+                        lower.startsWith("grok-3") ||
+                        lower.startsWith("grok-4")
+                    )
+                val supportsVision = lower.contains("vision") ||
+                    lower.startsWith("grok-2-vision") ||
+                    lower.startsWith("grok-3") ||
+                    lower.startsWith("grok-4") ||
+                    lower.contains("gemini")
 
-            val ordered = mutableListOf<DiscoveredModel>()
-            for (pref in priorityOrder) {
-                if (discoveredIds.contains(pref)) {
-                    ordered.add(DiscoveredModel(pref, pref, listOf("chat.completions")))
-                    discoveredIds.remove(pref)
+                val speed = if (lower.contains("mini") || lower.contains("fast") || lower.contains("instant")) {
+                    "Ultra-Fast"
+                } else {
+                    "Fast"
                 }
+
+                discovered.add(
+                    DiscoveredModel(
+                        id = id,
+                        displayName = id,
+                        provider = provider,
+                        supportedGenerationMethods = listOf("chat.completions"),
+                        supportsLiveAudio = supportsLive,
+                        supportsVision = supportsVision,
+                        supportsTools = true,
+                        speedTier = speed
+                    )
+                )
             }
-            for (rem in discoveredIds) {
-                ordered.add(DiscoveredModel(rem, rem, listOf("chat.completions")))
+
+            discovered.sortedByDescending { m ->
+                val id = m.id.lowercase()
+                var s = 0
+                if (m.supportsLiveAudio) s += 500
+                if (id.contains("grok-3") || id.contains("grok-4") || id.contains("llama-3.3-70b")) s += 400
+                if (id.contains("fast") || id.contains("mini") || id.contains("flash")) s += 200
+                s
             }
-            ordered
         } catch (e: Exception) {
             emptyList()
         }
@@ -302,25 +344,7 @@ class LlmProviderClient(
             )
         }
 
-        // For live Gemini connections, ensure the user's priority 3.x models and discovered models
-        // are both in the candidate queue, ordered by highest priority score first.
-        val candidateQueue = if (provider == ProviderType.GEMINI && baseUrlOverride.isEmpty()) {
-            val merged = LinkedHashMap<String, DiscoveredModel>()
-            // 1st: Any discovered models from the live key (already sorted with 3.8 -> 3.6 -> 3.5-lite -> 3.1-lite first)
-            for (m in discovery.eligibleModels) {
-                merged[m.id] = m
-            }
-            // 2nd: Ensure the priority fallback list is also included in case /models omitted a preview/lite alias
-            for (f in defaultGeminiFallbackCandidates()) {
-                if (!merged.containsKey(f.id)) {
-                    merged[f.id] = f
-                }
-            }
-            merged.values.sortedByDescending { scoreGeminiCandidate(it) }.take(8)
-        } else {
-            discovery.eligibleModels.take(6)
-        }
-
+        val candidateQueue = discovery.eligibleModels.take(4)
         var lastErrorResult: RawChatResponse? = null
 
         for (candidate in candidateQueue) {
@@ -329,24 +353,31 @@ class LlmProviderClient(
                     provider = provider,
                     apiKey = trimmedKey,
                     modelName = candidate.id,
-                    messages = listOf(ChatMessage(1L, ChatMessage.Role.USER, "Hi")),
-                    maxTokens = 16,
+                    messages = listOf(ChatMessage(1L, ChatMessage.Role.USER, "OK")),
+                    maxTokens = 8,
                     base64JpegImage = null
                 )
                 if (verifyResult.isSuccess) {
                     val elapsed = System.currentTimeMillis() - startMs
+                    val bestLiveVoiceModel = discovery.eligibleModels
+                        .firstOrNull { it.supportsLiveAudio }?.id
+                        ?: if (provider == ProviderType.GEMINI) "gemini-2.0-flash-exp" else candidate.id
+
                     return@withContext ProviderTestResult(
                         success = true,
                         provider = provider,
                         latencyMs = elapsed,
                         verifiedModel = candidate.id,
-                        userMessage = "Connected: ${candidate.id} (${elapsed}ms)",
+                        liveVoiceModel = bestLiveVoiceModel,
+                        discoveredModels = discovery.eligibleModels,
+                        userMessage = "Connected • Active: ${candidate.id} | Voice: $bestLiveVoiceModel (${elapsed}ms)",
                         errorCategory = ErrorCategory.NONE
                     )
                 }
                 lastErrorResult = verifyResult
-                // Only stop early if the key itself is rejected as invalid
-                if (verifyResult.errorCategory == ErrorCategory.INVALID_KEY) {
+                if (verifyResult.errorCategory == ErrorCategory.INVALID_KEY ||
+                    verifyResult.errorCategory == ErrorCategory.QUOTA_OR_RATE_LIMIT
+                ) {
                     break
                 }
             } catch (ce: CancellationException) {
@@ -360,38 +391,33 @@ class LlmProviderClient(
             }
         }
 
-        // Special fallback for Google 'AQ.' keys created via Vertex AI Express Mode
-        if (provider == ProviderType.GEMINI &&
-            trimmedKey.startsWith("AQ.") &&
-            baseUrlOverride.isEmpty()
-        ) {
-            val vertexExpressModels = listOf(
-                "vertex-v1:gemini-3.8-flash",
-                "vertex-v1:gemini-3.6-flash",
-                "vertex-v1:gemini-3.5-flash-lite",
-                "vertex-v1:gemini-3.1-flash-lite",
+        // Vertex AI Express Mode fallback for AQ. keys
+        if (provider == ProviderType.GEMINI && baseUrlOverride.isEmpty()) {
+            val vertexModels = listOf(
                 "vertex-v1:gemini-2.5-flash",
                 "vertex-v1:gemini-2.0-flash"
             )
-            for (vertexModelTag in vertexExpressModels) {
+            for (vertexTag in vertexModels) {
                 try {
                     val verifyVertex = executeChatRequest(
                         provider = ProviderType.GEMINI,
                         apiKey = trimmedKey,
-                        modelName = vertexModelTag,
-                        messages = listOf(ChatMessage(1L, ChatMessage.Role.USER, "Hi")),
-                        maxTokens = 16,
+                        modelName = vertexTag,
+                        messages = listOf(ChatMessage(1L, ChatMessage.Role.USER, "OK")),
+                        maxTokens = 8,
                         base64JpegImage = null
                     )
                     if (verifyVertex.isSuccess) {
                         val elapsed = System.currentTimeMillis() - startMs
-                        val shortName = vertexModelTag.substringAfter(":")
+                        val shortName = vertexTag.substringAfter(":")
                         return@withContext ProviderTestResult(
                             success = true,
                             provider = ProviderType.GEMINI,
                             latencyMs = elapsed,
-                            verifiedModel = vertexModelTag,
-                            userMessage = "Connected: $shortName (${elapsed}ms)",
+                            verifiedModel = vertexTag,
+                            liveVoiceModel = shortName,
+                            discoveredModels = discovery.eligibleModels,
+                            userMessage = "Connected • $shortName (${elapsed}ms)",
                             errorCategory = ErrorCategory.NONE
                         )
                     }
@@ -442,7 +468,7 @@ class LlmProviderClient(
                     apiKey = cleanedKey,
                     modelName = modelName.trim(),
                     messages = messages,
-                    maxTokens = 700,
+                    maxTokens = 300,
                     base64JpegImage = base64JpegImage
                 )
                 if (result.isSuccess) return@withContext result
@@ -465,7 +491,7 @@ class LlmProviderClient(
             }
             attempt++
             if (attempt <= maxRetries) {
-                delay(500L * attempt)
+                delay(350L * attempt)
             }
         }
         lastResponse
@@ -488,21 +514,21 @@ class LlmProviderClient(
                         val m = modelName.removePrefix("vertex-v1:")
                         "https://aiplatform.googleapis.com/v1/publishers/google/models/$m:generateContent?key=$apiKey"
                     }
-                    modelName.startsWith("vertex-v1beta1:") -> {
-                        val m = modelName.removePrefix("vertex-v1beta1:")
-                        "https://aiplatform.googleapis.com/v1beta1/publishers/google/models/$m:generateContent?key=$apiKey"
-                    }
                     else -> {
                         val cleanModel = modelName.removePrefix("models/")
-                        "${baseUrl(provider)}/models/$cleanModel:generateContent"
+                        if (baseUrlOverride.containsKey(ProviderType.GEMINI)) {
+                            "${baseUrl(provider)}/models/$cleanModel:generateContent"
+                        } else {
+                            "${baseUrl(provider)}/models/$cleanModel:generateContent?key=$apiKey"
+                        }
                     }
                 }
 
                 val systemPrompt = buildString {
-                    append("You are Bengali AI Agent, an honest, capable personal Android assistant with expert coding and UI screen automation skills. Reply naturally in Bengali or English matching the user.")
+                    append("You are Bengali AI Agent on a real-time voice call. Give very short, direct, natural spoken answers in Bengali or English matching the user. No long explanations.")
                     for (msg in messages) {
                         if (msg.role == ChatMessage.Role.SYSTEM && msg.text.isNotBlank()) {
-                            append("\n\n").append(msg.text)
+                            append("\n").append(msg.text)
                         }
                     }
                 }
@@ -539,7 +565,7 @@ class LlmProviderClient(
                         "generationConfig",
                         JSONObject()
                             .put("maxOutputTokens", maxTokens)
-                            .put("temperature", 0.35)
+                            .put("temperature", 0.3)
                     )
 
                 Request.Builder()
@@ -550,16 +576,16 @@ class LlmProviderClient(
                     .build()
             }
 
-            ProviderType.GROQ, ProviderType.OPENROUTER -> {
+            ProviderType.GROK, ProviderType.GROQ, ProviderType.OPENROUTER -> {
                 val url = "${baseUrl(provider)}/chat/completions"
                 val msgArray = JSONArray()
 
                 val systemBuilder = StringBuilder(
-                    "You are Bengali AI Agent, an honest, capable personal Android assistant with expert coding and UI screen automation skills. Reply naturally in Bengali or English matching the user."
+                    "You are Bengali AI Agent on a real-time voice call. Give very short, direct, natural spoken answers in Bengali or English matching the user. No long explanations."
                 )
                 for (msg in messages) {
                     if (msg.role == ChatMessage.Role.SYSTEM && msg.text.isNotBlank()) {
-                        systemBuilder.append("\n\n").append(msg.text)
+                        systemBuilder.append("\n").append(msg.text)
                     }
                 }
                 msgArray.put(
@@ -575,7 +601,7 @@ class LlmProviderClient(
                     val role = if (msg.role == ChatMessage.Role.ASSISTANT) "assistant" else "user"
                     if (idx == userAndAssistantMsgs.lastIndex &&
                         !base64JpegImage.isNullOrBlank() &&
-                        provider == ProviderType.OPENROUTER
+                        (provider == ProviderType.GROK || provider == ProviderType.OPENROUTER)
                     ) {
                         val contentArr = JSONArray()
                             .put(JSONObject().put("type", "text").put("text", msg.text))
@@ -595,7 +621,7 @@ class LlmProviderClient(
                     .put("model", modelName)
                     .put("messages", msgArray)
                     .put("max_tokens", maxTokens)
-                    .put("temperature", 0.35)
+                    .put("temperature", 0.3)
 
                 Request.Builder()
                     .url(url)
@@ -616,7 +642,7 @@ class LlmProviderClient(
                 return RawChatResponse(
                     isSuccess = false,
                     errorCategory = ErrorCategory.SERVER_ERROR,
-                    errorMessage = "Received an empty response from ${provider.displayName}."
+                    errorMessage = "Empty response from ${provider.displayName}."
                 )
             }
             return RawChatResponse(isSuccess = true, replyText = reply.trim())
@@ -721,9 +747,9 @@ class LlmProviderClient(
 
     companion object {
         fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
     }

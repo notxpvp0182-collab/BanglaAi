@@ -32,6 +32,15 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[KEY_PREFERRED_PROVIDER] = provider.id }
     }
 
+    suspend fun isAutoModelSelectionEnabled(): Boolean {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_AUTO_MODEL_SELECTION] ?: true
+    }
+
+    suspend fun setAutoModelSelectionEnabled(auto: Boolean) {
+        context.dataStore.edit { it[KEY_AUTO_MODEL_SELECTION] = auto }
+    }
+
     suspend fun getVerifiedModel(provider: ProviderType): String? {
         val prefs = context.dataStore.data.first()
         return prefs[modelKey(provider)]?.takeIf { it.isNotBlank() }
@@ -45,6 +54,30 @@ class AppPreferences(private val context: Context) {
                 it[modelKey(provider)] = modelName.trim()
             }
         }
+    }
+
+    suspend fun getLiveVoiceModel(provider: ProviderType): String? {
+        val prefs = context.dataStore.data.first()
+        return prefs[liveVoiceModelKey(provider)]?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun setLiveVoiceModel(provider: ProviderType, modelName: String?) {
+        context.dataStore.edit {
+            if (modelName.isNullOrBlank()) {
+                it.remove(liveVoiceModelKey(provider))
+            } else {
+                it[liveVoiceModelKey(provider)] = modelName.trim()
+            }
+        }
+    }
+
+    suspend fun getCachedModelsJson(provider: ProviderType): String? {
+        val prefs = context.dataStore.data.first()
+        return prefs[cachedModelsKey(provider)]
+    }
+
+    suspend fun setCachedModelsJson(provider: ProviderType, json: String) {
+        context.dataStore.edit { it[cachedModelsKey(provider)] = json }
     }
 
     suspend fun getLastConnectionMessage(): String {
@@ -135,10 +168,13 @@ class AppPreferences(private val context: Context) {
     }
 
     private fun modelKey(provider: ProviderType) = stringPreferencesKey("verified_model_${provider.id}")
+    private fun liveVoiceModelKey(provider: ProviderType) = stringPreferencesKey("live_voice_model_${provider.id}")
+    private fun cachedModelsKey(provider: ProviderType) = stringPreferencesKey("cached_models_${provider.id}")
 
     companion object {
         private val KEY_SETUP_COMPLETED = booleanPreferencesKey("setup_completed")
         private val KEY_PREFERRED_PROVIDER = stringPreferencesKey("preferred_provider")
+        private val KEY_AUTO_MODEL_SELECTION = booleanPreferencesKey("auto_model_selection")
         private val KEY_LAST_CONNECTION_MSG = stringPreferencesKey("last_connection_msg")
         private val KEY_CLOUD_CONSENT = booleanPreferencesKey("cloud_consent")
         private val KEY_AI_CODING_ENABLED = booleanPreferencesKey("ai_coding_capability_enabled")

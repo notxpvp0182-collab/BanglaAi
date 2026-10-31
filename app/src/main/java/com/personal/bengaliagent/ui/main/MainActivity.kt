@@ -8,66 +8,58 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Bundle
+import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.personal.bengaliagent.AgentApp
 import com.personal.bengaliagent.R
-import com.personal.bengaliagent.agent.ActionExecutor
-import com.personal.bengaliagent.agent.AgentPlanner
-import com.personal.bengaliagent.agent.AndroidActionManager
-import com.personal.bengaliagent.agent.PlannedAction
 import com.personal.bengaliagent.databinding.ActivityMainBinding
 import com.personal.bengaliagent.domain.model.AgentState
-import com.personal.bengaliagent.domain.model.ChatMessage
-import com.personal.bengaliagent.research.WebResearchClient
+import com.personal.bengaliagent.domain.model.ProviderType
 import com.personal.bengaliagent.screen.ScreenCaptureManager
-import com.personal.bengaliagent.service.AgentAccessibilityService
 import com.personal.bengaliagent.service.AgentForegroundService
 import com.personal.bengaliagent.service.AgentSessionBus
 import com.personal.bengaliagent.ui.settings.ProviderSettingsActivity
 import com.personal.bengaliagent.ui.setup.SetupWizardActivity
-import com.personal.bengaliagent.voice.VoiceManager
+import com.personal.bengaliagent.voice.RealtimeVoiceCallEngine
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val transcriptAdapter = TranscriptAdapter()
-    private val messages = mutableListOf<ChatMessage>()
-    private lateinit var voiceManager: VoiceManager
-    private lateinit var actionExecutor: ActionExecutor
-    private val webResearchClient = WebResearchClient()
+    private lateinit var callEngine: RealtimeVoiceCallEngine
 
-    private val memoryRepo by lazy { AgentApp.instance.memoryRepository }
     private val prefs by lazy { AgentApp.instance.appPreferences }
+    private val keyStore by lazy { AgentApp.instance.secureKeyStore }
+    private val router by lazy { AgentApp.instance.aiClientRouter }
 
     private var currentState: AgentState = AgentState.READY
-    private var isAssistantEnabled: Boolean = false
-    private var isMicMuted: Boolean = true
-    private var isScreenSharing: Boolean = false
-    private var activeTaskJob: Job? = null
-    private var orbPulseAnimator: ObjectAnimator? = null
+    private var callTimerJob: Job? = null
+    private var callStartTimestampMs: Long = 0L
+    private var ambientOrbAnimator: ObjectAnimator? = null
+    private var callingPulseAnimator: ObjectAnimator? = null
 
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            unmuteMicrophoneContinuous()
+            initiateRealTimeCall()
         } else {
-            Toast.makeText(this, "Microphone permission is required for voice input.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Microphone permission is required for real-time AI calling.",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -81,18 +73,9 @@ class MainActivity : AppCompatActivity() {
                 putExtra(AgentForegroundService.EXTRA_PROJECTION_DATA, result.data)
             }
             ContextCompat.startForegroundService(this, svcIntent)
-            isScreenSharing = true
-            isAssistantEnabled = true
-            updateState(AgentState.SCREEN_SHARING)
-            appendSystemMessage(
-                "Screen sharing is now active. Ask 'What is on my screen?' or open any external app for AI guidance.",
-                persist = false
-            )
-            refreshStatusUi()
+            refreshScreenShareUi(true)
         } else {
-            isScreenSharing = false
-            appendSystemMessage("Screen sharing consent was declined.", persist = false)
-            refreshStatusUi()
+            refreshScreenShareUi(false)
         }
     }
 
@@ -101,70 +84,20 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.rvTranscript.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity).apply {
-                stackFromEnd = true
-            }
-            adapter = transcriptAdapter
-        }
-
-        voiceManager = VoiceManager(
+        callEngine = RealtimeVoiceCallEngine(
             context = this,
             scope = lifecycleScope,
-            onTranscriptReady = { spokenText ->
-                updateState(AgentState.PROCESSING)
-                refreshStatusUi()
-                handleIncomingPrompt(spokenText)
+            router = router,
+            onCallStateChanged = { state, detail ->
+                handleEngineStateTransition(state, detail)
             },
-            onStatusUpdate = { statusEn ->
-                appendSystemMessage(statusEn, persist = false)
-            },
-            onListeningStateChanged = { listening ->
-                isMicMuted = !listening
-                if (listening) {
-                    updateState(AgentState.LISTENING)
-                } else if (currentState == AgentState.LISTENING) {
-                    updateState(AgentState.READY)
-                }
-                refreshStatusUi()
-            },
-            onSpeakingStateChanged = { speaking ->
-                if (speaking) {
-                    updateState(AgentState.SPEAKING)
-                } else if (currentState == AgentState.SPEAKING) {
-                    updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
-                }
-                refreshStatusUi()
-            },
-            onAudioRmsChanged = { rmsNormalized ->
-                val scale = 1.0f + (rmsNormalized * 0.35f)
-                binding.viewOrbOuterGlow.scaleX = scale
-                binding.viewOrbOuterGlow.scaleY = scale
-            }
-        )
-
-        actionExecutor = ActionExecutor(
-            context = this,
-            onConfirmSensitiveAction = { plannedAction ->
-                askUserConfirmationForSensitiveAction(plannedAction)
-            },
-            onStepProgress = { stepNote ->
-                runOnUiThread {
-                    updateState(AgentState.ACTING)
-                    appendSystemMessage(stepNote, persist = false)
-                    refreshStatusUi()
-                }
+            onAudioLevelUpdate = { level ->
+                animateActiveCallOrbWithAudioLevel(level)
             }
         )
 
         ScreenCaptureManager.onProjectionStoppedListener = {
-            runOnUiThread {
-                isScreenSharing = false
-                if (currentState == AgentState.SCREEN_SHARING) {
-                    updateState(AgentState.READY)
-                }
-                refreshStatusUi()
-            }
+            runOnUiThread { refreshScreenShareUi(false) }
         }
 
         observeSessionBusCommands()
@@ -174,22 +107,291 @@ class MainActivity : AppCompatActivity() {
             if (!completed) {
                 startActivity(Intent(this@MainActivity, SetupWizardActivity::class.java))
             }
-            memoryRepo.applyRetentionPolicy(prefs.getMemoryRetentionDays())
-            val savedHistory = memoryRepo.loadRecentMessages(limit = 50)
-            if (savedHistory.isNotEmpty()) {
-                messages.addAll(savedHistory)
-                transcriptAdapter.submitList(messages)
-                binding.rvTranscript.scrollToPosition(messages.size - 1)
+        }
+
+        setupCallControls()
+        startAmbientHomeOrbBreathing()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshHomeProviderSummary()
+        refreshScreenShareUi(ScreenCaptureManager.isSharingActive())
+    }
+
+    private fun refreshHomeProviderSummary() {
+        lifecycleScope.launch {
+            val preferred = prefs.getPreferredProvider()
+            val geminiVerified = keyStore.isProviderVerified(ProviderType.GEMINI)
+            val grokVerified = keyStore.isProviderVerified(ProviderType.GROK)
+
+            val activeProvider = when {
+                preferred == ProviderType.GROK && grokVerified -> ProviderType.GROK
+                geminiVerified -> ProviderType.GEMINI
+                grokVerified -> ProviderType.GROK
+                else -> null
+            }
+
+            if (activeProvider != null) {
+                val liveModel = prefs.getLiveVoiceModel(activeProvider) ?: "Auto Live Audio"
+                binding.tvSelectedProviderModel.text = "${activeProvider.displayName} • $liveModel"
+                binding.tvAgentState.text = "Connected • Ready"
+                binding.tvAgentState.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_green))
+                binding.tvHomeConnectionSubtitle.text =
+                    "Tap Call AI for real-time Bengali & English voice conversation"
             } else {
-                appendSystemMessage(
-                    "Welcome to Bengali AI Agent. Tap the top-right Settings gear to connect Gemini, Groq, or OpenRouter, or tap the AI Orb to speak.",
-                    persist = false
-                )
+                binding.tvSelectedProviderModel.text = "No Provider Connected • Tap Settings"
+                binding.tvAgentState.text = "Disconnected"
+                binding.tvAgentState.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_amber))
+                binding.tvHomeConnectionSubtitle.text =
+                    "Open Settings in the top-right corner to connect Google Gemini or xAI Grok"
+            }
+        }
+    }
+
+    private fun setupCallControls() {
+        binding.btnOpenSettings.setOnClickListener {
+            startActivity(Intent(this, ProviderSettingsActivity::class.java))
+        }
+
+        binding.btnStartAiCall.setOnClickListener {
+            checkMicAndStartCall()
+        }
+
+        binding.flHomeOrbContainer.setOnClickListener {
+            checkMicAndStartCall()
+        }
+
+        binding.btnCancelCalling.setOnClickListener {
+            endActiveCall()
+        }
+
+        binding.btnMicToggle.setOnClickListener {
+            val newMuted = !callEngine.isMuted()
+            callEngine.setMuted(newMuted)
+            updateMuteControlUi(newMuted)
+        }
+
+        binding.btnScreenToggle.setOnClickListener {
+            if (ScreenCaptureManager.isSharingActive()) {
+                ScreenCaptureManager.stopProjection()
+                refreshScreenShareUi(false)
+            } else {
+                val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                mediaProjectionLauncher.launch(mpm.createScreenCaptureIntent())
             }
         }
 
-        setupControls()
-        refreshStatusUi()
+        binding.btnSpeakerToggle.setOnClickListener {
+            val newSpeaker = !callEngine.isSpeakerphoneOn()
+            callEngine.setSpeakerphone(newSpeaker)
+            updateSpeakerControlUi(newSpeaker)
+        }
+
+        binding.btnStopTask.setOnClickListener {
+            endActiveCall()
+        }
+    }
+
+    private fun checkMicAndStartCall() {
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            initiateRealTimeCall()
+        } else {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun initiateRealTimeCall() {
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, AgentForegroundService::class.java)
+        )
+        showCallingTransitionScreen()
+        callEngine.startCall()
+    }
+
+    private fun endActiveCall() {
+        callEngine.endCall()
+        stopCallDurationTimer()
+        ScreenCaptureManager.stopProjection()
+        stopService(Intent(this, AgentForegroundService::class.java))
+        showHomeIdleScreen()
+    }
+
+    private fun handleEngineStateTransition(state: AgentState, detail: String) {
+        currentState = state
+        when (state) {
+            AgentState.CALLING,
+            AgentState.CONNECTING,
+            AgentState.RECONNECTING -> {
+                showCallingTransitionScreen()
+                binding.tvCallingStatusLabel.text = state.labelEn
+                binding.tvCallingModelInfo.text = detail
+            }
+            AgentState.CONNECTED -> {
+                showActiveCallScreen()
+                binding.tvActiveCallQuality.text = detail
+                binding.tvActiveCallState.text = "Connected"
+                startCallDurationTimer()
+            }
+            AgentState.LISTENING,
+            AgentState.THINKING,
+            AgentState.SPEAKING,
+            AgentState.ACTING,
+            AgentState.MUTED -> {
+                if (binding.layoutActiveCall.visibility != View.VISIBLE) {
+                    showActiveCallScreen()
+                    startCallDurationTimer()
+                }
+                binding.tvActiveCallState.text = detail.ifBlank { state.labelEn }
+                val colorRes = when (state) {
+                    AgentState.SPEAKING -> R.color.accent_green
+                    AgentState.ACTING, AgentState.THINKING -> R.color.accent_glow
+                    AgentState.MUTED -> R.color.accent_amber
+                    else -> R.color.accent_cyan
+                }
+                binding.tvActiveCallState.setTextColor(ContextCompat.getColor(this, colorRes))
+            }
+            AgentState.CALL_ENDED -> {
+                stopCallDurationTimer()
+                showHomeIdleScreen()
+                binding.tvHomeConnectionSubtitle.text = "Call ended"
+            }
+            AgentState.ERROR,
+            AgentState.OFFLINE -> {
+                stopCallDurationTimer()
+                showHomeIdleScreen()
+                binding.tvAgentState.text = "Connection Failed"
+                binding.tvAgentState.setTextColor(ContextCompat.getColor(this, R.color.accent_red_bright))
+                binding.tvHomeConnectionSubtitle.text = detail
+            }
+            else -> {
+                showHomeIdleScreen()
+            }
+        }
+    }
+
+    private fun showHomeIdleScreen() {
+        callingPulseAnimator?.cancel()
+        binding.layoutCallingTransition.visibility = View.GONE
+        binding.layoutActiveCall.visibility = View.GONE
+        binding.layoutHomeIdle.visibility = View.VISIBLE
+        startAmbientHomeOrbBreathing()
+        refreshHomeProviderSummary()
+    }
+
+    private fun showCallingTransitionScreen() {
+        ambientOrbAnimator?.cancel()
+        binding.layoutHomeIdle.visibility = View.GONE
+        binding.layoutActiveCall.visibility = View.GONE
+        binding.layoutCallingTransition.visibility = View.VISIBLE
+
+        callingPulseAnimator?.cancel()
+        callingPulseAnimator = ObjectAnimator.ofPropertyValuesHolder(
+            binding.viewCallingPulseRing,
+            PropertyValuesHolder.ofFloat("scaleX", 0.85f, 1.25f, 0.85f),
+            PropertyValuesHolder.ofFloat("scaleY", 0.85f, 1.25f, 0.85f),
+            PropertyValuesHolder.ofFloat("alpha", 0.9f, 0.3f, 0.9f)
+        ).apply {
+            duration = 1400L
+            repeatCount = ObjectAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
+        }
+    }
+
+    private fun showActiveCallScreen() {
+        ambientOrbAnimator?.cancel()
+        callingPulseAnimator?.cancel()
+        binding.layoutHomeIdle.visibility = View.GONE
+        binding.layoutCallingTransition.visibility = View.GONE
+        binding.layoutActiveCall.visibility = View.VISIBLE
+        updateMuteControlUi(callEngine.isMuted())
+        updateSpeakerControlUi(callEngine.isSpeakerphoneOn())
+        refreshScreenShareUi(ScreenCaptureManager.isSharingActive())
+    }
+
+    private fun startCallDurationTimer() {
+        if (callTimerJob?.isActive == true) return
+        callStartTimestampMs = System.currentTimeMillis()
+        callTimerJob = lifecycleScope.launch {
+            while (isActive && callEngine.isCallRunning()) {
+                val elapsedSec = ((System.currentTimeMillis() - callStartTimestampMs) / 1000L).coerceAtLeast(0L)
+                val mins = elapsedSec / 60L
+                val secs = elapsedSec % 60L
+                binding.tvCallDurationTimer.text =
+                    String.format(Locale.US, "%02d:%02d", mins, secs)
+                delay(1000L)
+            }
+        }
+    }
+
+    private fun stopCallDurationTimer() {
+        callTimerJob?.cancel()
+        callTimerJob = null
+        binding.tvCallDurationTimer.text = "00:00"
+    }
+
+    private fun animateActiveCallOrbWithAudioLevel(level: Float) {
+        if (binding.layoutActiveCall.visibility != View.VISIBLE) return
+        val outerScale = 1.0f + (level * 0.45f)
+        val coreScale = 1.0f + (level * 0.22f)
+        binding.viewActiveOrbOuter.scaleX = outerScale
+        binding.viewActiveOrbOuter.scaleY = outerScale
+        binding.viewActiveOrbCore.scaleX = coreScale
+        binding.viewActiveOrbCore.scaleY = coreScale
+    }
+
+    private fun startAmbientHomeOrbBreathing() {
+        ambientOrbAnimator?.cancel()
+        ambientOrbAnimator = ObjectAnimator.ofPropertyValuesHolder(
+            binding.viewHomeOrbOuter,
+            PropertyValuesHolder.ofFloat("scaleX", 0.95f, 1.08f, 0.95f),
+            PropertyValuesHolder.ofFloat("scaleY", 0.95f, 1.08f, 0.95f)
+        ).apply {
+            duration = 2800L
+            repeatCount = ObjectAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
+        }
+    }
+
+    private fun updateMuteControlUi(muted: Boolean) {
+        if (muted) {
+            binding.btnMicToggle.setBackgroundResource(R.drawable.bg_circle_call_end)
+            binding.btnMicToggle.setImageResource(R.drawable.ic_mic_off)
+            binding.tvMicToggleLabel.text = "Unmute"
+        } else {
+            binding.btnMicToggle.setBackgroundResource(R.drawable.bg_circle_control_idle)
+            binding.btnMicToggle.setImageResource(R.drawable.ic_mic_on)
+            binding.tvMicToggleLabel.text = "Mute"
+        }
+    }
+
+    private fun updateSpeakerControlUi(speakerOn: Boolean) {
+        if (speakerOn) {
+            binding.btnSpeakerToggle.setBackgroundResource(R.drawable.bg_circle_control_active)
+            binding.tvSpeakerToggleLabel.text = "Speaker On"
+        } else {
+            binding.btnSpeakerToggle.setBackgroundResource(R.drawable.bg_circle_control_idle)
+            binding.tvSpeakerToggleLabel.text = "Earpiece"
+        }
+    }
+
+    private fun refreshScreenShareUi(sharing: Boolean) {
+        if (sharing) {
+            binding.btnScreenToggle.setBackgroundResource(R.drawable.bg_circle_control_active)
+            binding.tvScreenToggleLabel.text = "Stop Share"
+            binding.tvInCallScreenShareBadge.visibility = View.VISIBLE
+        } else {
+            binding.btnScreenToggle.setBackgroundResource(R.drawable.bg_circle_control_idle)
+            binding.tvScreenToggleLabel.text = "Screen"
+            binding.tvInCallScreenShareBadge.visibility = View.GONE
+        }
     }
 
     private fun observeSessionBusCommands() {
@@ -200,570 +402,21 @@ class MainActivity : AppCompatActivity() {
                         binding.btnMicToggle.performClick()
                     }
                     AgentSessionBus.Command.TOGGLE_PAUSE -> {
-                        binding.btnPauseResume.performClick()
+                        binding.btnMicToggle.performClick()
                     }
-                    AgentSessionBus.Command.STOP_CURRENT_TASK -> {
-                        stopAllCaptureAndTasks("Current task stopped from notification control.")
-                        refreshStatusUi()
-                    }
+                    AgentSessionBus.Command.STOP_CURRENT_TASK,
                     AgentSessionBus.Command.DISABLE_SESSION -> {
-                        isAssistantEnabled = false
-                        stopAllCaptureAndTasks("Assistant session disabled.")
-                        refreshStatusUi()
+                        endActiveCall()
                     }
                 }
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        isScreenSharing = ScreenCaptureManager.isSharingActive()
-        isMicMuted = !voiceManager.isMicUnmuted()
-        lifecycleScope.launch {
-            voiceManager.setLanguageTag(prefs.getVoiceLanguageTag())
-        }
-        refreshStatusUi()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        orbPulseAnimator?.cancel()
-    }
-
-    private fun setupControls() {
-        binding.btnOpenSettings.setOnClickListener {
-            startActivity(Intent(this, ProviderSettingsActivity::class.java))
-        }
-
-        // Interactive AI Orb toggles voice listening or interrupts active speech
-        binding.flAiOrbContainer.setOnClickListener {
-            if (voiceManager.isCurrentlySpeaking()) {
-                voiceManager.stopSpeaking()
-                updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
-                refreshStatusUi()
-            } else {
-                binding.btnMicToggle.performClick()
-            }
-        }
-
-        binding.btnToggleAssistant.setOnClickListener {
-            isAssistantEnabled = !isAssistantEnabled
-            if (!isAssistantEnabled) {
-                stopAllCaptureAndTasks("Assistant disabled. Microphone and screen capture are off.")
-            } else {
-                ContextCompat.startForegroundService(
-                    this,
-                    Intent(this, AgentForegroundService::class.java)
-                )
-                updateState(if (isNetworkAvailable()) AgentState.READY else AgentState.OFFLINE)
-            }
-            refreshStatusUi()
-        }
-
-        binding.btnPauseResume.setOnClickListener {
-            if (currentState == AgentState.PAUSED) {
-                updateState(AgentState.READY)
-            } else {
-                activeTaskJob?.cancel()
-                voiceManager.stopListeningImmediately()
-                voiceManager.stopSpeaking()
-                ScreenCaptureManager.stopProjection()
-                isMicMuted = true
-                isScreenSharing = false
-                updateState(AgentState.PAUSED)
-                appendSystemMessage(
-                    "Assistant paused. Audio and screen capture stopped.",
-                    persist = false
-                )
-            }
-            refreshStatusUi()
-        }
-
-        binding.btnStopTask.setOnClickListener {
-            stopAllCaptureAndTasks("Stopped current task and released active capture.")
-            refreshStatusUi()
-        }
-
-        binding.btnMicToggle.setOnClickListener {
-            if (currentState == AgentState.PAUSED) {
-                Toast.makeText(this, "Resume the assistant before unmuting the microphone.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            if (!isMicMuted) {
-                voiceManager.stopListeningImmediately()
-                isMicMuted = true
-                updateState(AgentState.MUTED)
-                refreshStatusUi()
-            } else {
-                val granted = ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.RECORD_AUDIO
-                ) == PackageManager.PERMISSION_GRANTED
-                if (granted) {
-                    unmuteMicrophoneContinuous()
-                } else {
-                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            }
-        }
-
-        binding.btnScreenToggle.setOnClickListener {
-            if (isScreenSharing) {
-                ScreenCaptureManager.stopProjection()
-                isScreenSharing = false
-                updateState(AgentState.READY)
-                appendSystemMessage("Screen sharing stopped.", persist = false)
-                refreshStatusUi()
-            } else {
-                val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                mediaProjectionLauncher.launch(mpm.createScreenCaptureIntent())
-            }
-        }
-
-        // Quick Action Shortcuts
-        binding.btnQuickWhatsApp.setOnClickListener {
-            handleIncomingPrompt("Open WhatsApp")
-        }
-        binding.btnQuickYouTube.setOnClickListener {
-            handleIncomingPrompt("Open YouTube")
-        }
-        binding.btnQuickChrome.setOnClickListener {
-            handleIncomingPrompt("Open Chrome")
-        }
-        binding.btnQuickSettings.setOnClickListener {
-            handleIncomingPrompt("Open Settings")
-        }
-        binding.btnQuickWhatOnScreen.setOnClickListener {
-            handleIncomingPrompt("What is on my screen?")
-        }
-
-        binding.btnSend.setOnClickListener {
-            val prompt = binding.etUserInput.text?.toString()?.trim().orEmpty()
-            if (prompt.isEmpty()) return@setOnClickListener
-            binding.etUserInput.setText("")
-            handleIncomingPrompt(prompt)
-        }
-    }
-
-    private fun unmuteMicrophoneContinuous() {
-        isMicMuted = false
-        if (!isAssistantEnabled) {
-            isAssistantEnabled = true
-            ContextCompat.startForegroundService(
-                this,
-                Intent(this, AgentForegroundService::class.java)
-            )
-        }
-        voiceManager.setContinuousMode(true)
-        voiceManager.startListening()
-        refreshStatusUi()
-    }
-
-    private fun handleIncomingPrompt(prompt: String) {
-        if (prompt.equals("stop", ignoreCase = true) ||
-            prompt.contains("থামো") ||
-            prompt.contains("বন্ধ করো")
-        ) {
-            stopAllCaptureAndTasks("Task stopped immediately at your request.")
-            refreshStatusUi()
-            return
-        }
-        sendUserMessage(prompt)
-    }
-
-    private fun isScreenInspectionQuestion(prompt: String): Boolean {
-        val lower = prompt.lowercase()
-        val triggers = listOf(
-            "what is on my screen", "what's on my screen", "read my screen",
-            "analyze my screen", "describe my screen",
-            "স্ক্রিনে কী", "আমার স্ক্রিনে", "স্ক্রিন দেখে বলো"
-        )
-        return triggers.any { lower.contains(it) }
-    }
-
-    private fun sendUserMessage(prompt: String) {
-        voiceManager.stopSpeaking()
-        val userMsg = ChatMessage(
-            id = System.currentTimeMillis(),
-            role = ChatMessage.Role.USER,
-            text = prompt
-        )
-        messages.add(userMsg)
-        transcriptAdapter.submitList(messages)
-        binding.rvTranscript.scrollToPosition(messages.size - 1)
-
-        lifecycleScope.launch {
-            memoryRepo.saveChatMessage(userMsg)
-        }
-
-        // 1. Deterministic Local App Action Execution (Works even offline!)
-        val directAction = AndroidActionManager.tryExecuteDirectCommand(this, prompt)
-        if (directAction.matchedIntentCommand) {
-            val reply = directAction.responseMessage
-            val assistantMsg = ChatMessage(
-                id = System.currentTimeMillis(),
-                role = ChatMessage.Role.ASSISTANT,
-                text = reply,
-                providerUsed = "Android System"
-            )
-            messages.add(assistantMsg)
-            transcriptAdapter.submitList(messages)
-            binding.rvTranscript.scrollToPosition(messages.size - 1)
-            lifecycleScope.launch {
-                memoryRepo.saveChatMessage(assistantMsg)
-                memoryRepo.recordTaskOutcome(
-                    goal = prompt,
-                    status = if (directAction.executedSuccess) "COMPLETED" else "FAILED",
-                    outcome = reply,
-                    steps = 1
-                )
-                if (prefs.isTtsAutoSpeakEnabled()) {
-                    voiceManager.speak(reply)
-                }
-            }
-            updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
-            refreshStatusUi()
-            return
-        }
-
-        // 2. Honest Screen Inspection Check before querying Cloud AI
-        val askingAboutScreen = isScreenInspectionQuestion(prompt)
-        val screenObs = AgentAccessibilityService.instance?.observeCurrentScreen()
-        if (askingAboutScreen && !ScreenCaptureManager.isSharingActive() && screenObs == null) {
-            val honestMsg =
-                "Screen sharing and Accessibility inspection are currently off. Tap 'Screen: Off' above and approve Android's screen capture prompt so I can see and analyze your screen."
-            appendSystemMessage(honestMsg, persist = false)
-            lifecycleScope.launch {
-                if (prefs.isTtsAutoSpeakEnabled()) {
-                    voiceManager.speak(honestMsg)
-                }
-            }
-            refreshStatusUi()
-            return
-        }
-
-        if (!isNetworkAvailable()) {
-            updateState(AgentState.OFFLINE)
-            appendSystemMessage(
-                "You are currently offline. Your message has been saved to local memory.",
-                persist = false
-            )
-            refreshStatusUi()
-            return
-        }
-
-        activeTaskJob?.cancel()
-        activeTaskJob = lifecycleScope.launch {
-            updateState(AgentState.THINKING)
-            refreshStatusUi()
-
-            val isAutomation = !askingAboutScreen && AgentPlanner.isAutomationIntent(prompt)
-            val isResearch = !isAutomation && !askingAboutScreen && WebResearchClient.isResearchIntent(prompt)
-
-            val screenshotBase64 = if (isScreenSharing && ScreenCaptureManager.isSharingActive()) {
-                if (askingAboutScreen) {
-                    ScreenCaptureManager.captureFreshFrameWithRetry()
-                } else {
-                    ScreenCaptureManager.captureThrottledFrameBase64()
-                }
-            } else {
-                null
-            }
-
-            val memoryContext = memoryRepo.buildRelevantMemoryContext(prompt)
-            val contextMessages = mutableListOf<ChatMessage>()
-            if (memoryContext.isNotBlank()) {
-                contextMessages.add(
-                    ChatMessage(
-                        id = 0L,
-                        role = ChatMessage.Role.SYSTEM,
-                        text = "Use the following retrieved local memory records when answering questions about the past:\n$memoryContext"
-                    )
-                )
-            }
-
-            var citationsFooter = ""
-            if (isResearch) {
-                val researchBundle = webResearchClient.performBoundedSearch(prompt)
-                contextMessages.add(
-                    ChatMessage(
-                        id = 0L,
-                        role = ChatMessage.Role.SYSTEM,
-                        text = researchBundle.toPromptContextString()
-                    )
-                )
-                if (researchBundle.sources.isNotEmpty()) {
-                    citationsFooter = "\n\nSources:\n" +
-                        researchBundle.sources.joinToString("\n") { "• ${it.title}: ${it.url}" }
-                }
-            }
-
-            if (askingAboutScreen && screenObs != null) {
-                contextMessages.add(
-                    ChatMessage(
-                        id = 0L,
-                        role = ChatMessage.Role.SYSTEM,
-                        text = "The user is asking about their current screen. Here is the visible UI hierarchy:\n${screenObs.toCompactPromptString()}"
-                    )
-                )
-            } else if (isAutomation || isScreenSharing) {
-                val codingAllowed = prefs.isAiCodingCapabilityEnabled()
-                val videoAllowed = prefs.isAiVideoEditCapabilityEnabled()
-                contextMessages.add(
-                    ChatMessage(
-                        id = 0L,
-                        role = ChatMessage.Role.SYSTEM,
-                        text = AgentPlanner.buildPlannerSystemPrompt(
-                            screenObservation = screenObs,
-                            codingEnabled = codingAllowed,
-                            videoEditingEnabled = videoAllowed
-                        )
-                    )
-                )
-            }
-
-            val recentWindow = messages
-                .filter { it.role != ChatMessage.Role.SYSTEM }
-                .takeLast(8)
-            contextMessages.addAll(recentWindow)
-
-            val routed = AgentApp.instance.aiClientRouter.sendMessageWithFailover(
-                messages = contextMessages,
-                base64JpegImage = screenshotBase64
-            )
-
-            if (!routed.success) {
-                appendSystemMessage(routed.replyText, persist = false)
-                updateState(if (isMicMuted) AgentState.ERROR else AgentState.LISTENING)
-                refreshStatusUi()
-                return@launch
-            }
-
-            if (isAutomation) {
-                val plan = AgentPlanner.parseAndValidatePlan(routed.replyText)
-                if (plan.actions.isNotEmpty()) {
-                    updateState(AgentState.ACTING)
-                    refreshStatusUi()
-                    val stepResults = actionExecutor.executePlan(
-                        plan = plan,
-                        isCancelled = { activeTaskJob?.isCancelled == true }
-                    )
-                    val summaryReport = buildString {
-                        if (plan.thoughtBn.isNotBlank()) {
-                            appendLine("Plan: ${plan.thoughtBn}")
-                        }
-                        stepResults.forEachIndexed { i, r ->
-                            val statusIcon = if (r.verifiedSuccess) "✓" else "✗"
-                            appendLine("${i + 1}. [$statusIcon ${r.action.tool.name}] ${r.observationNoteBn}")
-                        }
-                    }.trim()
-
-                    val allSucceeded = stepResults.isNotEmpty() && stepResults.all { it.verifiedSuccess }
-                    memoryRepo.recordTaskOutcome(
-                        goal = prompt,
-                        status = if (allSucceeded) "COMPLETED" else "FAILED",
-                        outcome = summaryReport,
-                        steps = stepResults.size
-                    )
-
-                    val assistantMsg = ChatMessage(
-                        id = System.currentTimeMillis(),
-                        role = ChatMessage.Role.ASSISTANT,
-                        text = summaryReport,
-                        providerUsed = routed.providerUsed?.displayName
-                    )
-                    messages.add(assistantMsg)
-                    memoryRepo.saveChatMessage(assistantMsg)
-                    if (prefs.isTtsAutoSpeakEnabled()) {
-                        voiceManager.speak(summaryReport)
-                    } else {
-                        updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
-                    }
-                    transcriptAdapter.submitList(messages)
-                    binding.rvTranscript.scrollToPosition(messages.size - 1)
-                    refreshStatusUi()
-                    return@launch
-                }
-            }
-
-            val baseReply = if (isAutomation) {
-                AgentPlanner.parseAndValidatePlan(routed.replyText)
-                    .directReplyBn.ifBlank { routed.replyText }
-            } else {
-                routed.replyText
-            }
-            val finalReply = if (citationsFooter.isNotBlank() && !baseReply.contains("http")) {
-                baseReply + citationsFooter
-            } else {
-                baseReply
-            }
-
-            val assistantMsg = ChatMessage(
-                id = System.currentTimeMillis(),
-                role = ChatMessage.Role.ASSISTANT,
-                text = finalReply,
-                providerUsed = routed.providerUsed?.displayName
-            )
-            messages.add(assistantMsg)
-            memoryRepo.saveChatMessage(assistantMsg)
-
-            if (prefs.isTtsAutoSpeakEnabled()) {
-                voiceManager.speak(baseReply)
-            } else {
-                updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
-            }
-            transcriptAdapter.submitList(messages)
-            binding.rvTranscript.scrollToPosition(messages.size - 1)
-            refreshStatusUi()
-        }
-    }
-
-    private suspend fun askUserConfirmationForSensitiveAction(action: PlannedAction): Boolean =
-        suspendCoroutine { cont ->
-            runOnUiThread {
-                AlertDialog.Builder(this)
-                    .setTitle("Confirm Sensitive Action (${action.riskLevel.name})")
-                    .setMessage(
-                        "The assistant is requesting permission to execute:\n\n" +
-                            "Action: ${action.tool.name}\n" +
-                            "Target: ${action.targetLabel.ifBlank { action.textToType }}\n" +
-                            "Reason: ${action.reasoningBn}\n\n" +
-                            "Do you approve this action?"
-                    )
-                    .setCancelable(false)
-                    .setPositiveButton("Approve") { _, _ -> cont.resume(true) }
-                    .setNegativeButton("Cancel") { _, _ -> cont.resume(false) }
-                    .show()
-            }
-        }
-
-    private fun stopAllCaptureAndTasks(reasonEn: String) {
-        activeTaskJob?.cancel()
-        activeTaskJob = null
-        voiceManager.stopListeningImmediately()
-        voiceManager.stopSpeaking()
-        ScreenCaptureManager.stopProjection()
-        isMicMuted = true
-        isScreenSharing = false
-        stopService(Intent(this, AgentForegroundService::class.java))
-        updateState(AgentState.READY)
-        appendSystemMessage(reasonEn, persist = false)
-    }
-
-    private fun updateState(newState: AgentState) {
-        currentState = newState
-        updateOrbAnimationForState(newState)
-    }
-
-    private fun updateOrbAnimationForState(state: AgentState) {
-        orbPulseAnimator?.cancel()
-        val isAnimatedState = state == AgentState.LISTENING ||
-            state == AgentState.PROCESSING ||
-            state == AgentState.THINKING ||
-            state == AgentState.SPEAKING ||
-            state == AgentState.ACTING
-
-        if (!isAnimatedState) {
-            binding.viewOrbOuterGlow.scaleX = 1.0f
-            binding.viewOrbOuterGlow.scaleY = 1.0f
-            binding.viewOrbCore.scaleX = 1.0f
-            binding.viewOrbCore.scaleY = 1.0f
-            return
-        }
-
-        val targetScale = if (state == AgentState.SPEAKING) 1.22f else 1.15f
-        val duration = when (state) {
-            AgentState.PROCESSING, AgentState.THINKING -> 550L
-            AgentState.SPEAKING -> 450L
-            else -> 850L
-        }
-
-        orbPulseAnimator = ObjectAnimator.ofPropertyValuesHolder(
-            binding.viewOrbCore,
-            PropertyValuesHolder.ofFloat("scaleX", 1.0f, targetScale, 1.0f),
-            PropertyValuesHolder.ofFloat("scaleY", 1.0f, targetScale, 1.0f)
-        ).apply {
-            this.duration = duration
-            repeatCount = ObjectAnimator.INFINITE
-            interpolator = AccelerateDecelerateInterpolator()
-            start()
-        }
-    }
-
-    private fun refreshStatusUi() {
-        binding.tvAgentState.text = currentState.labelEn
-        val stateColorRes = when (currentState) {
-            AgentState.READY -> R.color.accent_green
-            AgentState.LISTENING, AgentState.SPEAKING -> R.color.accent_cyan
-            AgentState.PROCESSING, AgentState.THINKING, AgentState.ACTING -> R.color.accent_glow
-            AgentState.ERROR, AgentState.OFFLINE -> R.color.accent_red_bright
-            else -> R.color.text_secondary
-        }
-        binding.tvAgentState.setTextColor(ContextCompat.getColor(this, stateColorRes))
-
-        binding.tvOrbSubtitle.text = when (currentState) {
-            AgentState.LISTENING -> "Listening continuously... Speak in Bengali or English."
-            AgentState.PROCESSING -> "Processing your speech..."
-            AgentState.THINKING -> "Analyzing context and generating response..."
-            AgentState.SPEAKING -> "Speaking... Tap the AI Orb to interrupt."
-            AgentState.ACTING -> "Executing verified Android action..."
-            AgentState.SCREEN_SHARING -> "Screen sharing live. Ask 'What is on my screen?'"
-            AgentState.OFFLINE -> "Disconnected • Check your internet connection."
-            AgentState.ERROR -> "Connection or task error • Check AI Connection settings."
-            else -> "Tap the AI Orb or Mic to speak naturally in Bengali or English"
-        }
-
-        binding.btnToggleAssistant.text =
-            if (isAssistantEnabled) "Active" else "Start"
-        binding.btnPauseResume.text =
-            if (currentState == AgentState.PAUSED) "Resume" else "Pause"
-        binding.btnScreenToggle.text =
-            if (isScreenSharing) "Screen: On" else "Screen: Off"
-
-        if (isMicMuted) {
-            binding.btnMicToggle.text = "Muted"
-            binding.btnMicToggle.setBackgroundResource(R.drawable.bg_btn_3d_dark)
-            binding.btnMicToggle.setCompoundDrawablesWithIntrinsicBounds(
-                R.drawable.ic_mic_off, 0, 0, 0
-            )
-        } else {
-            binding.btnMicToggle.text = "Unmuted"
-            binding.btnMicToggle.setBackgroundResource(R.drawable.bg_btn_3d_red)
-            binding.btnMicToggle.setCompoundDrawablesWithIntrinsicBounds(
-                R.drawable.ic_mic_on, 0, 0, 0
-            )
-        }
-
-        val micStatus = if (isMicMuted) "Mic Muted" else "Mic On"
-        val screenStatus = if (isScreenSharing) "Screen On" else "Screen Off"
-        binding.tvPrivacyIndicator.text = "$micStatus | $screenStatus"
-    }
-
-    private fun appendSystemMessage(text: String, persist: Boolean) {
-        val sysMsg = ChatMessage(
-            id = System.currentTimeMillis(),
-            role = ChatMessage.Role.SYSTEM,
-            text = text
-        )
-        messages.add(sysMsg)
-        transcriptAdapter.submitList(messages)
-        binding.rvTranscript.scrollToPosition(messages.size - 1)
-        if (persist) {
-            lifecycleScope.launch { memoryRepo.saveChatMessage(sysMsg) }
-        }
-    }
-
-    private fun isNetworkAvailable(): Boolean {
-        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-        val net = cm.activeNetwork ?: return false
-        val caps = cm.getNetworkCapabilities(net) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     override fun onDestroy() {
-        orbPulseAnimator?.cancel()
-        voiceManager.releaseAll()
+        ambientOrbAnimator?.cancel()
+        callingPulseAnimator?.cancel()
+        callEngine.endCall()
         super.onDestroy()
     }
 }
