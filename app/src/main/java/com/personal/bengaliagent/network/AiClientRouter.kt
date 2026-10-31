@@ -1,8 +1,10 @@
 package com.personal.bengaliagent.network
 
 import com.personal.bengaliagent.data.prefs.AppPreferences
+import com.personal.bengaliagent.data.security.CredentialRole
 import com.personal.bengaliagent.data.security.SecureKeyStore
 import com.personal.bengaliagent.domain.model.ChatMessage
+import com.personal.bengaliagent.domain.model.ErrorCategory
 import com.personal.bengaliagent.domain.model.ProviderTestResult
 import com.personal.bengaliagent.domain.model.ProviderType
 import kotlinx.coroutines.async
@@ -17,6 +19,9 @@ class AiClientRouter(
     private val client: LlmProviderClient = LlmProviderClient()
 ) {
 
+    var lastLatencyMs: Long = 350L
+        private set
+
     data class RoutedResponse(
         val success: Boolean,
         val replyText: String,
@@ -26,25 +31,36 @@ class AiClientRouter(
     data class AgentVoiceReply(
         val provider: ProviderType,
         val modelId: String,
-        val spokenText: String
+        val spokenText: String,
+        val latencyMs: Long
     )
 
+    fun networkQualityBadge(): String {
+        return when {
+            lastLatencyMs <= 900L -> "Excellent (${lastLatencyMs}ms)"
+            lastLatencyMs <= 2000L -> "Good (${lastLatencyMs}ms)"
+            else -> "Weak (${lastLatencyMs}ms)"
+        }
+    }
+
     suspend fun connectAndVerifyGemini(rawKey: String): ProviderTestResult =
-        connectAndVerifyProvider(ProviderType.GEMINI, rawKey)
+        connectAndVerifyProvider(ProviderType.GEMINI, rawKey, CredentialRole.PRIMARY_VOICE)
 
     suspend fun connectAndVerifyProvider(
         provider: ProviderType,
-        rawKey: String
+        rawKey: String,
+        role: CredentialRole = CredentialRole.PRIMARY_VOICE
     ): ProviderTestResult {
         val trimmed = rawKey.trim()
         val result = client.discoverAndVerifyProvider(provider, trimmed)
         if (result.success && !result.verifiedModel.isNullOrBlank()) {
-            keyStore.saveApiKey(provider, trimmed)
+            keyStore.saveApiKey(provider, trimmed, role)
             keyStore.setProviderVerified(provider, true)
             preferences.setVerifiedModel(provider, result.verifiedModel)
             preferences.setLiveVoiceModel(provider, result.liveVoiceModel ?: result.verifiedModel)
             preferences.setPreferredProvider(provider)
             preferences.setLastConnectionMessage(result.userMessage)
+            lastLatencyMs = result.latencyMs
 
             val arr = JSONArray()
             result.discoveredModels.forEach { m ->
@@ -59,7 +75,7 @@ class AiClientRouter(
                 )
             }
             preferences.setCachedModelsJson(provider, arr.toString())
-        } else {
+        } else if (role == CredentialRole.PRIMARY_VOICE) {
             keyStore.setProviderVerified(provider, false)
             preferences.setLastConnectionMessage(result.userMessage)
         }
@@ -67,27 +83,25 @@ class AiClientRouter(
     }
 
     suspend fun disconnectProvider(provider: ProviderType) {
-        keyStore.deleteApiKey(provider)
+        keyStore.deleteApiKey(provider, null)
         preferences.setVerifiedModel(provider, null)
         preferences.setLiveVoiceModel(provider, null)
     }
 
     fun getConnectedProviders(): List<ProviderType> {
         return ProviderType.entries.filter { p ->
-            !keyStore.getApiKey(p).isNullOrBlank() && keyStore.isProviderVerified(p)
-        }.ifEmpty {
-            ProviderType.entries.filter { p -> !keyStore.getApiKey(p).isNullOrBlank() }
+            keyStore.getKeysForRoleWithBackup(p, CredentialRole.PRIMARY_VOICE).isNotEmpty()
         }
     }
 
     /**
-     * Queries either the primary connected AI agent OR multiple connected AI agents in parallel
-     * when Multi-AI Agent Mode is enabled!
+     * Queries active AI agents using role-specific API keys (Voice / Vision / Intelligence)
+     * with automatic rotation to the Backup API key if a primary key fails or hits quota.
      */
     suspend fun queryActiveCallAgents(
         messages: List<ChatMessage>,
         base64JpegImage: String? = null,
-        multiAgentMode: Boolean = true
+        multiAgentMode: Boolean = false
     ): List<AgentVoiceReply> = coroutineScope {
         val connected = getConnectedProviders()
         if (connected.isEmpty()) return@coroutineScope emptyList()
@@ -96,61 +110,87 @@ class AiClientRouter(
         val ordered = (listOf(preferred) + connected).distinct().filter { connected.contains(it) }
 
         val targetAgents = if (multiAgentMode && ordered.size > 1) {
-            ordered.take(3) // Up to 3 AI agents speaking & working together simultaneously
+            ordered.take(2)
         } else {
             ordered.take(1)
         }
 
+        val roleNeeded = if (!base64JpegImage.isNullOrBlank()) {
+            CredentialRole.VISION
+        } else {
+            CredentialRole.PRIMARY_VOICE
+        }
+
         val deferredReplies = targetAgents.map { provider ->
             async {
-                val apiKey = keyStore.getApiKey(provider) ?: return@async null
-                val modelId = preferences.getVerifiedModel(provider)
-                    ?: preferences.getLiveVoiceModel(provider)
-                    ?: defaultModelFor(provider)
-
-                val resp = client.sendChatWithBoundedRetry(
-                    provider = provider,
-                    apiKey = apiKey,
-                    modelName = modelId,
-                    messages = messages,
-                    maxRetries = 1,
-                    base64JpegImage = base64JpegImage
-                )
-                if (resp.isSuccess && resp.replyText.isNotBlank()) {
-                    AgentVoiceReply(
-                        provider = provider,
-                        modelId = modelId.substringAfter(":"),
-                        spokenText = resp.replyText
-                    )
-                } else {
-                    null
-                }
+                executeWithRoleKeyRotation(provider, roleNeeded, messages, base64JpegImage)
             }
         }
 
         val results = deferredReplies.awaitAll().filterNotNull()
-        if (results.isNotEmpty()) return@coroutineScope results
+        if (results.isNotEmpty()) {
+            lastLatencyMs = results.first().latencyMs
+            return@coroutineScope results
+        }
 
-        // Fallback: if the primary failed and we weren't in multi-agent mode, try remaining connected providers
+        // Failover to any remaining connected provider
         for (fallbackProvider in ordered.drop(targetAgents.size)) {
-            val apiKey = keyStore.getApiKey(fallbackProvider) ?: continue
-            val modelId = preferences.getVerifiedModel(fallbackProvider) ?: defaultModelFor(fallbackProvider)
+            val reply = executeWithRoleKeyRotation(
+                fallbackProvider,
+                roleNeeded,
+                messages,
+                base64JpegImage
+            )
+            if (reply != null) {
+                lastLatencyMs = reply.latencyMs
+                return@coroutineScope listOf(reply)
+            }
+        }
+
+        emptyList()
+    }
+
+    private suspend fun executeWithRoleKeyRotation(
+        provider: ProviderType,
+        role: CredentialRole,
+        messages: List<ChatMessage>,
+        base64JpegImage: String?
+    ): AgentVoiceReply? {
+        val keys = keyStore.getKeysForRoleWithBackup(provider, role)
+        if (keys.isEmpty()) return null
+
+        val modelId = preferences.getVerifiedModel(provider)
+            ?: preferences.getLiveVoiceModel(provider)
+            ?: defaultModelFor(provider)
+
+        for (apiKey in keys) {
+            val startMs = System.currentTimeMillis()
             val resp = client.sendChatWithBoundedRetry(
-                provider = fallbackProvider,
+                provider = provider,
                 apiKey = apiKey,
                 modelName = modelId,
                 messages = messages,
                 maxRetries = 0,
                 base64JpegImage = base64JpegImage
             )
+            val elapsed = System.currentTimeMillis() - startMs
             if (resp.isSuccess && resp.replyText.isNotBlank()) {
-                return@coroutineScope listOf(
-                    AgentVoiceReply(fallbackProvider, modelId, resp.replyText)
+                return AgentVoiceReply(
+                    provider = provider,
+                    modelId = modelId.substringAfter(":"),
+                    spokenText = resp.replyText,
+                    latencyMs = elapsed
                 )
             }
+            // If key failed with quota or auth error, loop rotates immediately to Backup Key!
+            if (resp.errorCategory != ErrorCategory.QUOTA_OR_RATE_LIMIT &&
+                resp.errorCategory != ErrorCategory.INVALID_KEY &&
+                resp.errorCategory != ErrorCategory.NETWORK_ERROR
+            ) {
+                break
+            }
         }
-
-        emptyList()
+        return null
     }
 
     suspend fun sendMessageWithFailover(

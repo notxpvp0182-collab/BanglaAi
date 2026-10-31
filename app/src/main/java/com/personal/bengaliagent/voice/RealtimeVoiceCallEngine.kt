@@ -15,8 +15,11 @@ import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import com.personal.bengaliagent.AgentApp
 import com.personal.bengaliagent.agent.AndroidActionManager
+import com.personal.bengaliagent.data.security.CredentialRole
 import com.personal.bengaliagent.domain.model.AgentState
 import com.personal.bengaliagent.domain.model.ChatMessage
+import com.personal.bengaliagent.domain.model.FemaleVoicePersona
+import com.personal.bengaliagent.domain.model.PersonalityMode
 import com.personal.bengaliagent.domain.model.ProviderType
 import com.personal.bengaliagent.network.AiClientRouter
 import com.personal.bengaliagent.screen.ScreenCaptureManager
@@ -31,12 +34,6 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Real-Time Voice Calling Engine with:
- * - Cute Female Bengali Voice selection & tuning
- * - Affectionate GF / Personal Companion persona with permanent SQLite Memory Brain recall & learning
- * - Full live Screen Share vision + Accessibility screen touch/swipe/long-press/type control
- */
 class RealtimeVoiceCallEngine(
     private val context: Context,
     private val scope: CoroutineScope,
@@ -54,6 +51,7 @@ class RealtimeVoiceCallEngine(
     private var preferredFemaleBnVoice: Voice? = null
     private var preferredFemaleEnVoice: Voice? = null
     private var speechRecognizer: SpeechRecognizer? = null
+    private val geminiTtsClient = GeminiTtsClient()
 
     private val isCallActive = AtomicBoolean(false)
     private val isMicMuted = AtomicBoolean(false)
@@ -67,6 +65,7 @@ class RealtimeVoiceCallEngine(
     private val recentCallHistory = ArrayList<ChatMessage>()
     private val speechQueue = ConcurrentLinkedQueue<Pair<ProviderType, String>>()
     private val memoryRepo by lazy { AgentApp.instance.memoryRepository }
+    private val prefs by lazy { AgentApp.instance.appPreferences }
 
     init {
         tts = TextToSpeech(context.applicationContext, this)
@@ -103,9 +102,6 @@ class RealtimeVoiceCallEngine(
         }
     }
 
-    /**
-     * Searches installed device TTS voices for a natural female Bengali & English voice.
-     */
     private fun selectBestCuteFemaleVoices() {
         val voices = tts?.voices ?: return
         val bnVoices = voices.filter { it.locale.language.equals("bn", ignoreCase = true) }
@@ -130,7 +126,7 @@ class RealtimeVoiceCallEngine(
         if (connectedProviders.isEmpty()) {
             onCallStateChanged(
                 AgentState.ERROR,
-                "No AI provider connected. Tap the top-right Settings icon to connect Gemini, Groq, OpenRouter, or OpenAI."
+                "No AI provider connected. Tap Settings to connect Gemini or Grok."
             )
             return
         }
@@ -140,23 +136,27 @@ class RealtimeVoiceCallEngine(
         speechQueue.clear()
 
         val activeNames = connectedProviders.joinToString(" + ") { it.displayName }
-        onCallStateChanged(AgentState.CALLING, "Connecting to $activeNames...")
+        onCallStateChanged(AgentState.CALLING, "Calling Sumu AI ($activeNames)...")
 
         scope.launch(Dispatchers.Main) {
             configureCallAudioRouting()
-            // Preload recent conversation memory from SQLite Brain
             val savedMsgs = memoryRepo.loadRecentMessages(limit = 6)
             recentCallHistory.clear()
             recentCallHistory.addAll(savedMsgs)
 
-            delay(350L)
+            val mode = prefs.getPersonalityMode()
+            delay(320L)
             if (!isCallActive.get()) return@launch
 
-            onCallStateChanged(AgentState.CONNECTED, "Live • $activeNames")
-            // Greet the user warmly in a cute female voice when the call connects
-            enqueueAndSpeakReplies(
-                listOf(connectedProviders.first() to "হ্যালো জান, আমি শুনছি, বলো কী করব তোমার জন্য?")
-            )
+            onCallStateChanged(AgentState.CONNECTED, "${router.networkQualityBadge()} • ${mode.badgeLabel}")
+            val greeting = when (mode) {
+                PersonalityMode.GF -> "হ্যালো জান, আমি সুমু। বলো কী করব তোমার জন্য?"
+                PersonalityMode.BEST_FRIEND -> "হেই দোস্ত! বল কী খবর?"
+                PersonalityMode.PROFESSIONAL -> "Sumu AI connected. How may I assist you?"
+                PersonalityMode.SILENT_ASSISTANT -> "প্রস্তুত।"
+                else -> "হ্যালো, আমি সুমু। বলো কীভাবে সাহায্য করতে পারি?"
+            }
+            enqueueAndSpeakReplies(listOf(connectedProviders.first() to greeting))
         }
     }
 
@@ -182,9 +182,7 @@ class RealtimeVoiceCallEngine(
                 }
             }
             val langTag = runCatching {
-                kotlinx.coroutines.runBlocking {
-                    AgentApp.instance.appPreferences.getVoiceLanguageTag()
-                }
+                kotlinx.coroutines.runBlocking { prefs.getVoiceLanguageTag() }
             }.getOrDefault("bn-BD")
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -202,7 +200,7 @@ class RealtimeVoiceCallEngine(
         }
     }
 
-    private fun scheduleListenRestart(delayMs: Long = 280L) {
+    private fun scheduleListenRestart(delayMs: Long = 260L) {
         listenRestartJob?.cancel()
         listenRestartJob = scope.launch(Dispatchers.Main) {
             delay(delayMs)
@@ -212,32 +210,45 @@ class RealtimeVoiceCallEngine(
         }
     }
 
-    private fun saveUserTeachingIfPresent(spokenText: String) {
-        scope.launch(Dispatchers.IO) {
-            val lower = spokenText.lowercase()
-            val triggers = listOf(
-                "মনে রেখো", "মনে রাখবে", "ভুলে যেও না", "আজ থেকে", "তুমি আমাকে", "আমার নাম",
-                "শিখিয়ে দিচ্ছি", "শিখে রাখো", "remember", "my name is"
-            )
-            if (triggers.any { lower.contains(it) }) {
+    /**
+     * Extracts user preferences (such as favorite voice Aoede/Callirrhoe/Despina, name, or facts)
+     * and persists them in SQLite Memory Brain across restarts.
+     */
+    private suspend fun extractAndPersistMemories(spokenText: String) {
+        val lower = spokenText.lowercase()
+
+        // Check if user mentioned a favorite female voice persona
+        for (persona in FemaleVoicePersona.entries) {
+            if (lower.contains(persona.voiceId.lowercase())) {
+                prefs.setPreferredFemaleVoice(persona)
                 memoryRepo.addOrUpdateFact(
-                    category = "USER_TAUGHT",
-                    title = spokenText.take(36),
-                    details = spokenText
+                    category = "PREFERENCE",
+                    title = "Favorite Voice (পছন্দের ভয়েস)",
+                    details = "ইউজারের পছন্দের voice হলো ${persona.voiceId}"
                 )
             }
+        }
+
+        val triggers = listOf(
+            "মনে রেখো", "মনে রাখবে", "ভুলে যেও না", "আজ থেকে", "তুমি আমাকে", "আমার নাম",
+            "পছন্দের", "ভালোবাসি", "শিখিয়ে দিচ্ছি", "শিখে রাখো", "remember", "my favorite", "my name"
+        )
+        if (triggers.any { lower.contains(it) }) {
+            memoryRepo.addOrUpdateFact(
+                category = "USER_MEMORY",
+                title = spokenText.take(38),
+                details = spokenText
+            )
         }
     }
 
     private fun handleUserSpokenTurn(spokenText: String) {
         if (!isCallActive.get() || spokenText.isBlank()) return
-
         stopAiSpeechOnly()
-        saveUserTeachingIfPresent(spokenText)
 
         activeTurnJob?.cancel()
         activeTurnJob = scope.launch(Dispatchers.Main) {
-            onCallStateChanged(AgentState.THINKING, "\"${spokenText.take(42)}\"")
+            onCallStateChanged(AgentState.THINKING, "\"${spokenText.take(40)}\"")
 
             val userMsg = ChatMessage(
                 id = System.currentTimeMillis(),
@@ -245,12 +256,34 @@ class RealtimeVoiceCallEngine(
                 text = spokenText
             )
             memoryRepo.saveChatMessage(userMsg)
+            extractAndPersistMemories(spokenText)
+
             recentCallHistory.add(userMsg)
             if (recentCallHistory.size > 8) {
                 recentCallHistory.removeAt(0)
             }
 
-            // 1. Instant Local Phone & Screen Action Execution (WhatsApp, YouTube, Tap, Scroll, Swipe, Long-Press, Flashlight)
+            // 1. Check for Dynamic Voice Personality Mode Switching
+            val newMode = PersonalityMode.detectVoiceModeSwitch(spokenText)
+            if (newMode != null) {
+                prefs.setPersonalityMode(newMode)
+                memoryRepo.addOrUpdateFact(
+                    category = "PREFERENCE",
+                    title = "Personality Mode",
+                    details = "Active personality mode: ${newMode.displayName}"
+                )
+                val confirmText = when (newMode) {
+                    PersonalityMode.GF -> "ঠিক আছে জান, এখন থেকে আমি তোমার GF মোডেই কথা বলব।"
+                    PersonalityMode.PROFESSIONAL -> "Switched to Professional Mode."
+                    PersonalityMode.BEST_FRIEND -> "ওকে দোস্ত! এখন থেকে একদম ফ্রেন্ডলি কথা হবে।"
+                    PersonalityMode.SILENT_ASSISTANT -> "সাইলেন্ট মোড চালু।"
+                    else -> "ঠিক আছে, এখন থেকে ${newMode.displayName}-এ কথা বলব।"
+                }
+                enqueueAndSpeakReplies(listOf(ProviderType.GEMINI to confirmText))
+                return@launch
+            }
+
+            // 2. Instant Android Phone & Screen Control Execution
             val directAction = AndroidActionManager.tryExecuteDirectCommand(context, spokenText)
             if (directAction.matchedIntentCommand) {
                 onCallStateChanged(AgentState.ACTING, directAction.responseMessage)
@@ -259,7 +292,7 @@ class RealtimeVoiceCallEngine(
                         id = System.currentTimeMillis(),
                         role = ChatMessage.Role.ASSISTANT,
                         text = directAction.responseMessage,
-                        providerUsed = "Phone Control"
+                        providerUsed = "Sumu Action"
                     )
                 )
                 enqueueAndSpeakReplies(
@@ -268,8 +301,10 @@ class RealtimeVoiceCallEngine(
                 return@launch
             }
 
-            // 2. Build Full Context: Durable Memory Brain + Live Screen UI Tree + Fresh Screenshot
-            val prefs = AgentApp.instance.appPreferences
+            // 3. Build Context with Active Personality Mode + Persistent Memory + Live Screen
+            val activeMode = prefs.getPersonalityMode()
+            val customPrompt = prefs.getCustomPersonalityPrompt()
+            val favoriteVoice = prefs.getPreferredFemaleVoice()
             val multiAgentMode = prefs.isAutoModelSelectionEnabled()
             val memoryContext = memoryRepo.buildRelevantMemoryContext(spokenText)
             val screenObs = AgentAccessibilityService.instance?.observeCurrentScreen()
@@ -279,27 +314,22 @@ class RealtimeVoiceCallEngine(
                 null
             }
 
-            val accActive = AgentAccessibilityService.isServiceEnabled()
-            val screenShareActive = ScreenCaptureManager.isSharingActive()
-
             val masterInstruction = buildString {
-                appendLine("তুমি ইউজারের নিজের মিষ্টি, কিউট এবং যত্নশীল গার্লফ্রেন্ড (GF) ও পার্সোনাল এআই অ্যাসিস্ট্যান্ট।")
-                appendLine("সবসময় স্বাভাবিক, মিষ্টি ও আদুরে বাংলায় (যেমন: জান, শোনো, এই তো করে দিচ্ছি) খুব সংক্ষেপে ১-২ বাক্যে কথা বলবে।")
-                appendLine("তোমার ক্ষমতা ও পারমিশন স্ট্যাটাস:")
-                appendLine("- ফোনের যেকোনো অ্যাপ (WhatsApp, YouTube, Chrome, Settings, Camera, TikTok, InShot, CapCut ইত্যাদি) ওপেন করার পারমিশন তোমার কাছে ১০০% আছে।")
-                appendLine("- স্ক্রিন টাচ, লং প্রেস, সোয়াইপ, স্ক্রল, ব্যাক, হোম ও টাইপ করার অ্যাক্সেসিবিলিটি কন্ট্রোল: ${if (accActive) "চালু আছে (ACTIVE)" else "চালু আছে"}।")
-                appendLine("- লাইভ স্ক্রিন শেয়ার: ${if (screenShareActive) "চালু আছে (তুমি স্ক্রিনের ছবি সরাসরি দেখছো)" else "অ্যাক্সেসিবিলিটি থেকে স্ক্রিন দেখা যাচ্ছে"}।")
-                appendLine("গুরুত্বপূর্ণ নিয়ম: ইউজার যদি কোনো অ্যাপ ওপেন করতে বা স্ক্রিনে টাচ/স্ক্রল/লং-প্রেস/টাইপ করতে বলে, তবে তোমার উত্তরের শেষে নিচের ফরম্যাটে কমান্ডটি যুক্ত করবে যাতে ফোন সাথে সাথে কাজটি করে:")
-                appendLine("[ACTION: tool_name | target_name]")
-                appendLine("অনুমোদিত tool_name সমূহ: open_app, tap_element, long_press, scroll_down, scroll_up, swipe_left, swipe_right, type_text, go_back, go_home, turn_on_flashlight, turn_off_flashlight")
-                appendLine("উদাহরণ: এই তো জান, তোমার হোয়াটসঅ্যাপ ওপেন করে দিচ্ছি। [ACTION: open_app | whatsapp]")
+                appendLine(activeMode.systemInstruction)
+                if (activeMode == PersonalityMode.CUSTOM && customPrompt.isNotBlank()) {
+                    appendLine("ইউজারের কাস্টম পার্সোনালিটি নির্দেশনা: $customPrompt")
+                }
+                appendLine("তোমার নাম Sumu AI (সুমু) এবং তোমার বর্তমান কণ্ঠ (Voice) হলো: ${favoriteVoice.voiceId}।")
+                appendLine("তোমার কাছে ইউজারের ফোনের যেকোনো অ্যাপ ওপেন করা এবং পুরো স্ক্রিন কন্ট্রোল করার (টাচ, লং প্রেস, স্ক্রল, সোয়াইপ, ব্যাক, হোম, টাইপ) সম্পূর্ণ পারমিশন আছে।")
+                appendLine("ইউজার কোনো কাজ বা স্ক্রিন অ্যাকশন করতে বললে উত্তরের শেষে লিখবে: [ACTION: tool_name | target_name]")
+                appendLine("tool_name হতে পারে: open_app, tap_element, long_press, scroll_down, scroll_up, swipe_left, swipe_right, type_text, go_back, go_home, turn_on_flashlight, turn_off_flashlight")
                 if (memoryContext.isNotBlank()) {
-                    appendLine("\nতোমার মেমোরি ব্রেইনে সংরক্ষিত ইউজারের আগের কথা ও পছন্দ:")
+                    appendLine("\nতোমার দীর্ঘমেয়াদী মেমোরি (Saved Long-Term Memory):")
                     appendLine(memoryContext)
                 }
                 if (screenObs != null && screenObs.elements.isNotEmpty()) {
-                    appendLine("\nবর্তমানে ইউজারের ফোনের স্ক্রিনে যা যা দেখা যাচ্ছে (Live Screen UI):")
-                    appendLine(screenObs.toCompactPromptString(maxElements = 55))
+                    appendLine("\nবর্তমানে ফোনের স্ক্রিনে যা যা দেখা যাচ্ছে (Live Screen UI):")
+                    appendLine(screenObs.toCompactPromptString(maxElements = 50))
                 }
             }
 
@@ -328,7 +358,6 @@ class RealtimeVoiceCallEngine(
                 return@launch
             }
 
-            // 3. Parse and Execute any [ACTION: tool | target] or JSON action returned by the AI!
             val spokenPairs = mutableListOf<Pair<ProviderType, String>>()
             for ((idx, reply) in agentReplies.withIndex()) {
                 val cleanSpoken = executeEmbeddedAiActionIfPresent(reply.spokenText)
@@ -350,10 +379,6 @@ class RealtimeVoiceCallEngine(
         }
     }
 
-    /**
-     * Extracts and executes `[ACTION: tool | target]` or JSON action blocks from the AI's response
-     * and returns the clean conversational text for the female voice to speak.
-     */
     private fun executeEmbeddedAiActionIfPresent(rawReply: String): String {
         var spoken = rawReply
         val actionRegex = Regex("\\[ACTION:\\s*([^|\\]]+)\\s*(?:\\|\\s*([^\\]]*))?\\]", RegexOption.IGNORE_CASE)
@@ -415,7 +440,7 @@ class RealtimeVoiceCallEngine(
             if (isMicMuted.get()) {
                 onCallStateChanged(AgentState.MUTED, "Microphone Muted")
             } else {
-                onCallStateChanged(AgentState.LISTENING, "Listening...")
+                onCallStateChanged(AgentState.LISTENING, "Listening • ${router.networkQualityBadge()}")
                 scheduleListenRestart(220L)
             }
             return
@@ -428,41 +453,52 @@ class RealtimeVoiceCallEngine(
             .trim()
 
         isAiSpeaking.set(true)
-        onCallStateChanged(AgentState.SPEAKING, "${provider.displayName} Speaking...")
+        scope.launch(Dispatchers.Main) {
+            val persona = prefs.getPreferredFemaleVoice()
+            onCallStateChanged(AgentState.SPEAKING, "Sumu (${persona.voiceId}) Speaking...")
+            startSimulatedSpeakingWave()
 
-        val hasBengali = cleanSpeech.any { it in '\u0980'..'\u09FF' }
-        if (hasBengali) {
-            if (preferredFemaleBnVoice != null) {
-                tts?.voice = preferredFemaleBnVoice
-            } else {
-                tts?.language = Locale("bn", "BD")
+            // If network is fast, try Gemini Cloud TTS first when speaking short lines, else use instant tuned female TTS
+            val geminiVoiceKey = AgentApp.instance.secureKeyStore
+                .getKeysForRoleWithBackup(ProviderType.GEMINI, CredentialRole.PRIMARY_VOICE)
+                .firstOrNull()
+
+            if (!geminiVoiceKey.isNullOrBlank() && router.lastLatencyMs < 1100L && cleanSpeech.length <= 140) {
+                val playedCloud = geminiTtsClient.synthesizeAndPlayIfSupported(
+                    apiKey = geminiVoiceKey,
+                    text = cleanSpeech,
+                    voicePersona = persona
+                )
+                if (playedCloud) {
+                    playNextQueuedAgentVoiceOrResumeListening()
+                    return@launch
+                }
             }
-        } else {
-            if (preferredFemaleEnVoice != null) {
-                tts?.voice = preferredFemaleEnVoice
+
+            val hasBengali = cleanSpeech.any { it in '\u0980'..'\u09FF' }
+            if (hasBengali) {
+                if (preferredFemaleBnVoice != null) {
+                    tts?.voice = preferredFemaleBnVoice
+                } else {
+                    tts?.language = Locale("bn", "BD")
+                }
             } else {
-                tts?.language = Locale.US
+                if (preferredFemaleEnVoice != null) {
+                    tts?.voice = preferredFemaleEnVoice
+                } else {
+                    tts?.language = Locale.US
+                }
             }
-        }
 
-        // Cute, sweet, natural feminine vocal pitch (1.14f - 1.18f) and smooth conversational rate
-        val femalePitch = when (provider) {
-            ProviderType.GEMINI -> 1.15f
-            ProviderType.GROQ -> 1.12f
-            ProviderType.OPENROUTER -> 1.18f
-            ProviderType.OPENAI -> 1.14f
-            ProviderType.GROK -> 1.10f
+            tts?.setPitch(persona.pitchMultiplier)
+            tts?.setSpeechRate(persona.rateMultiplier)
+            tts?.speak(
+                cleanSpeech,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "call_utt_${System.currentTimeMillis()}"
+            )
         }
-        tts?.setPitch(femalePitch)
-        tts?.setSpeechRate(0.97f)
-
-        startSimulatedSpeakingWave()
-        tts?.speak(
-            cleanSpeech,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            "call_utt_${System.currentTimeMillis()}"
-        )
     }
 
     private fun startSimulatedSpeakingWave() {

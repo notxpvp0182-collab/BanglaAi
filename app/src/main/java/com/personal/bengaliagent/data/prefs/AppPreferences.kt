@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.personal.bengaliagent.domain.model.FemaleVoicePersona
+import com.personal.bengaliagent.domain.model.PersonalityMode
 import com.personal.bengaliagent.domain.model.ProviderType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -30,6 +32,42 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setPreferredProvider(provider: ProviderType) {
         context.dataStore.edit { it[KEY_PREFERRED_PROVIDER] = provider.id }
+    }
+
+    suspend fun getPersonalityMode(): PersonalityMode {
+        val prefs = context.dataStore.data.first()
+        return PersonalityMode.fromId(prefs[KEY_PERSONALITY_MODE] ?: PersonalityMode.GF.id)
+    }
+
+    suspend fun setPersonalityMode(mode: PersonalityMode) {
+        context.dataStore.edit { it[KEY_PERSONALITY_MODE] = mode.id }
+    }
+
+    suspend fun getCustomPersonalityPrompt(): String {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_CUSTOM_PERSONALITY_PROMPT] ?: ""
+    }
+
+    suspend fun setCustomPersonalityPrompt(prompt: String) {
+        context.dataStore.edit { it[KEY_CUSTOM_PERSONALITY_PROMPT] = prompt.trim() }
+    }
+
+    suspend fun getPreferredFemaleVoice(): FemaleVoicePersona {
+        val prefs = context.dataStore.data.first()
+        return FemaleVoicePersona.fromId(prefs[KEY_PREFERRED_FEMALE_VOICE] ?: FemaleVoicePersona.AOEDE.voiceId)
+    }
+
+    suspend fun setPreferredFemaleVoice(voice: FemaleVoicePersona) {
+        context.dataStore.edit { it[KEY_PREFERRED_FEMALE_VOICE] = voice.voiceId }
+    }
+
+    suspend fun isReducedMotionEnabled(): Boolean {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_REDUCED_MOTION] ?: false
+    }
+
+    suspend fun setReducedMotionEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_REDUCED_MOTION] = enabled }
     }
 
     suspend fun isAutoModelSelectionEnabled(): Boolean {
@@ -174,6 +212,10 @@ class AppPreferences(private val context: Context) {
     companion object {
         private val KEY_SETUP_COMPLETED = booleanPreferencesKey("setup_completed")
         private val KEY_PREFERRED_PROVIDER = stringPreferencesKey("preferred_provider")
+        private val KEY_PERSONALITY_MODE = stringPreferencesKey("sumu_personality_mode")
+        private val KEY_CUSTOM_PERSONALITY_PROMPT = stringPreferencesKey("sumu_custom_personality")
+        private val KEY_PREFERRED_FEMALE_VOICE = stringPreferencesKey("sumu_preferred_female_voice")
+        private val KEY_REDUCED_MOTION = booleanPreferencesKey("sumu_reduced_motion")
         private val KEY_AUTO_MODEL_SELECTION = booleanPreferencesKey("auto_model_selection")
         private val KEY_LAST_CONNECTION_MSG = stringPreferencesKey("last_connection_msg")
         private val KEY_CLOUD_CONSENT = booleanPreferencesKey("cloud_consent")

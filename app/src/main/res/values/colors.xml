@@ -1,28 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- UI UX Pro Max Palette: Deep Midnight Navy & Electric Blue/Cyan -->
-    <color name="bg_black">#060B16</color>
-    <color name="bg_surface">#0D1526</color>
-    <color name="bg_card">#131E36</color>
-    <color name="bg_card_elevated">#192744</color>
-    <color name="bg_user_bubble">#1D4ED8</color>
+    <!-- Sumu AI Anime Twilight Palette: Midnight Blue, Violet & Sakura Pink -->
+    <color name="bg_black">#070814</color>
+    <color name="bg_surface">#101328</color>
+    <color name="bg_card">#171B36</color>
+    <color name="bg_card_elevated">#20264A</color>
+    <color name="bg_user_bubble">#6D28D9</color>
 
-    <!-- High-Contrast Typography -->
-    <color name="text_primary">#F8FAFC</color>
-    <color name="text_secondary">#94A3B8</color>
-    <color name="text_muted">#64748B</color>
+    <color name="text_primary">#FAF8FF</color>
+    <color name="text_secondary">#B4B8D8</color>
+    <color name="text_muted">#6E749E</color>
 
-    <!-- AI-Native Electric Blue & Cyan Accents -->
-    <color name="accent_primary">#2563EB</color>
-    <color name="accent_blue">#3B82F6</color>
-    <color name="accent_cyan">#06B6D4</color>
-    <color name="accent_glow">#38BDF8</color>
+    <color name="accent_primary">#7C3AED</color>
+    <color name="accent_blue">#6366F1</color>
+    <color name="accent_cyan">#EC4899</color>
+    <color name="accent_glow">#F472B6</color>
     <color name="accent_green">#10B981</color>
     <color name="accent_amber">#F59E0B</color>
     <color name="accent_red">#EF4444</color>
-    <color name="accent_red_bright">#F87171</color>
+    <color name="accent_red_bright">#FB7185</color>
 
-    <!-- Glassmorphic Borders & Dividers -->
-    <color name="divider">#233554</color>
-    <color name="border_focus">#38BDF8</color>
+    <color name="divider">#2E335C</color>
+    <color name="border_focus">#F472B6</color>
 </resources>

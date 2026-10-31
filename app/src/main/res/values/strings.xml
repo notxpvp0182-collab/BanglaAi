@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Bengali AI Agent</string>
-    <string name="accessibility_service_label">Bengali AI Accessibility Assistant</string>
-    <string name="accessibility_service_description">Used to inspect visible screen labels and perform user-requested UI actions such as opening apps, tapping buttons, typing, and scrolling. It never collects passwords or private credentials.</string>
-    <string name="privacy_notice_english">Privacy &amp; Safety Principles:\n1. The microphone is never active unless you explicitly tap to speak.\n2. Screen sharing starts only after Android\'s official consent prompt and displays a clear live indicator.\n3. Passwords, PINs, OTPs, biometric prompts, and payment confirmations are never bypassed or auto-filled.\n4. When connected to Google Gemini, prompts are sent over encrypted HTTPS using your API key and quota.</string>
+    <string name="app_name">SUMU AI</string>
+    <string name="accessibility_service_label">Sumu AI Voice Screen Assistant</string>
+    <string name="accessibility_service_description">Helps you open apps, navigate screens, and perform voice-requested touch actions during an active Sumu AI session. Never collects passwords or private credentials.</string>
+    <string name="privacy_notice_english">Sumu AI Privacy &amp; Safety:\n1. The microphone is active only when you start a call with Sumu.\n2. Screen sharing starts only after Android\'s official consent prompt.\n3. API keys are encrypted in Android Keystore and never logged.\n4. Passwords, PINs, and payment prompts are never accessed.</string>
     <string name="ai_connection_title">AI Connection</string>
     <string name="provider_label_gemini">Google Gemini</string>
-    <string name="hint_enter_gemini_api_key">Enter Gemini API Key</string>
+    <string name="hint_enter_gemini_api_key">Enter Primary / Voice Gemini Key</string>
     <string name="action_connect_gemini">Connect Gemini</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="action_retry">Retry</string>

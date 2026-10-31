@@ -8,13 +8,17 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.personal.bengaliagent.AgentApp
 import com.personal.bengaliagent.databinding.ActivityVoiceSettingsBinding
+import com.personal.bengaliagent.domain.model.FemaleVoicePersona
+import com.personal.bengaliagent.domain.model.PersonalityMode
 import com.personal.bengaliagent.domain.model.ProviderType
 import com.personal.bengaliagent.voice.CloudSttClient
+import com.personal.bengaliagent.voice.GeminiTtsClient
 import com.personal.bengaliagent.voice.SpeakerVerifier
 import com.personal.bengaliagent.voice.VoiceManager
 import kotlinx.coroutines.delay
@@ -27,6 +31,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
     private val prefs by lazy { AgentApp.instance.appPreferences }
     private val keyStore by lazy { AgentApp.instance.secureKeyStore }
     private val cloudSttClient = CloudSttClient()
+    private val geminiTtsClient = GeminiTtsClient()
 
     private val micPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -49,14 +54,22 @@ class VoiceSettingsActivity : AppCompatActivity() {
             onListeningStateChanged = {}
         )
 
-        setupLanguageAndTtsControls()
+        setupFemaleVoiceLibraryAndPersonality()
         setupCloudSttTest()
         setupSpeakerVerificationControls()
 
         binding.btnCloseVoiceSettings.setOnClickListener { finish() }
     }
 
-    private fun setupLanguageAndTtsControls() {
+    private fun setupFemaleVoiceLibraryAndPersonality() {
+        val personas = FemaleVoicePersona.entries
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            personas.map { "${it.displayName} — ${it.styleDescription}" }
+        )
+        binding.spinnerVoices.adapter = adapter
+
         lifecycleScope.launch {
             val lang = prefs.getVoiceLanguageTag()
             if (lang.startsWith("en")) {
@@ -66,32 +79,33 @@ class VoiceSettingsActivity : AppCompatActivity() {
             }
             binding.cbAutoSpeak.isChecked = prefs.isTtsAutoSpeakEnabled()
 
-            delay(500)
-            binding.tvTtsEngineStatus.text = voiceManager.getTtsStatusDescription()
-            val voices = voiceManager.getAvailableVoicesForBengaliAndEnglish()
-            if (voices.isNotEmpty()) {
-                val adapter = ArrayAdapter(
-                    this@VoiceSettingsActivity,
-                    android.R.layout.simple_spinner_dropdown_item,
-                    voices
-                )
-                binding.spinnerVoices.adapter = adapter
-                binding.spinnerVoices.onItemSelectedListener =
-                    object : AdapterView.OnItemSelectedListener {
-                        override fun onItemSelected(
-                            parent: AdapterView<*>?,
-                            view: View?,
-                            position: Int,
-                            id: Long
-                        ) {
-                            val selected = voices.getOrNull(position) ?: return
-                            voiceManager.selectVoiceByName(selected)
-                            binding.tvTtsEngineStatus.text = voiceManager.getTtsStatusDescription()
-                        }
+            val currentVoice = prefs.getPreferredFemaleVoice()
+            val currentMode = prefs.getPersonalityMode()
+            val idx = personas.indexOf(currentVoice).coerceAtLeast(0)
+            binding.spinnerVoices.setSelection(idx)
 
-                        override fun onNothingSelected(parent: AdapterView<*>?) {}
-                    }
+            delay(400)
+            binding.tvTtsEngineStatus.text =
+                "Selected Voice: ${currentVoice.voiceId} | Personality: ${currentMode.displayName}"
+        }
+
+        binding.spinnerVoices.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                val chosen = personas.getOrElse(position) { FemaleVoicePersona.AOEDE }
+                lifecycleScope.launch {
+                    prefs.setPreferredFemaleVoice(chosen)
+                    val mode = prefs.getPersonalityMode()
+                    binding.tvTtsEngineStatus.text =
+                        "Selected Voice: ${chosen.voiceId} | Personality: ${mode.displayName}"
+                }
             }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         binding.rgLanguage.setOnCheckedChangeListener { _, checkedId ->
@@ -103,9 +117,41 @@ class VoiceSettingsActivity : AppCompatActivity() {
             lifecycleScope.launch { prefs.setTtsAutoSpeakEnabled(isChecked) }
         }
 
+        binding.btnTestTts.text = "Preview Female Voice & Choose Personality"
         binding.btnTestTts.setOnClickListener {
-            voiceManager.speak("Hello, I am your personal Bengali AI Agent.")
+            lifecycleScope.launch {
+                val chosenVoice = prefs.getPreferredFemaleVoice()
+                val sampleText = "হ্যালো জান, আমি সুমু। আমার ${chosenVoice.voiceId} কণ্ঠটি তোমার কেমন লাগছে?"
+                val geminiKey = keyStore.getApiKey(ProviderType.GEMINI).orEmpty()
+                val playedCloud = if (geminiKey.isNotBlank()) {
+                    geminiTtsClient.synthesizeAndPlayIfSupported(geminiKey, sampleText, chosenVoice)
+                } else {
+                    false
+                }
+                if (!playedCloud) {
+                    voiceManager.speak(sampleText)
+                }
+                showPersonalityModePickerDialog()
+            }
         }
+    }
+
+    private fun showPersonalityModePickerDialog() {
+        val modes = PersonalityMode.entries
+        val labels = modes.map { it.displayName }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Select Sumu AI Personality Mode")
+            .setItems(labels) { _, which ->
+                val chosenMode = modes[which]
+                lifecycleScope.launch {
+                    prefs.setPersonalityMode(chosenMode)
+                    val voice = prefs.getPreferredFemaleVoice()
+                    binding.tvTtsEngineStatus.text =
+                        "Selected Voice: ${voice.voiceId} | Personality: ${chosenMode.displayName}"
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private fun setupCloudSttTest() {
@@ -114,7 +160,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
             val groqKey = keyStore.getApiKey(ProviderType.GROQ).orEmpty()
             if (groqKey.isBlank()) {
                 binding.tvCloudSttResult.text =
-                    "System SpeechRecognizer is active by default. Cloud Whisper STT is optional."
+                    "System SpeechRecognizer is active. Optional Groq Whisper key not set."
                 return@setOnClickListener
             }
             binding.tvCloudSttResult.text = "Speak now for 3 seconds..."
@@ -153,13 +199,13 @@ class VoiceSettingsActivity : AppCompatActivity() {
                 "Recording 2.5 seconds of speech... Please speak naturally."
             voiceManager.captureShortPcmSample(durationMs = 2500) { samples ->
                 if (samples == null) {
-                    binding.tvSpeakerEnrollStatus.text = "Could not capture audio from microphone."
+                    binding.tvSpeakerEnrollStatus.text = "Could not capture audio."
                     return@captureShortPcmSample
                 }
                 val embedding = SpeakerVerifier.extractEmbedding(samples, zeroOutBuffer = true)
                 if (embedding == null) {
                     binding.tvSpeakerEnrollStatus.text =
-                        "Insufficient voice energy detected. Please speak clearly and try again."
+                        "Insufficient voice energy. Speak clearly and try again."
                 } else {
                     lifecycleScope.launch {
                         prefs.setEnrolledSpeakerEmbedding(
@@ -167,7 +213,7 @@ class VoiceSettingsActivity : AppCompatActivity() {
                         )
                         prefs.setSpeakerDetectionEnabled(true)
                         binding.cbEnableSpeakerMatch.isChecked = true
-                        refreshEnrollmentStatus("Voice enrolled locally (raw audio zeroed and discarded).")
+                        refreshEnrollmentStatus("Voice enrolled locally.")
                     }
                 }
             }
@@ -179,10 +225,10 @@ class VoiceSettingsActivity : AppCompatActivity() {
                 val enrolledStr = prefs.getEnrolledSpeakerEmbedding()
                 val enrolledVec = SpeakerVerifier.deserializeEmbedding(enrolledStr)
                 if (enrolledVec == null) {
-                    binding.tvSpeakerEnrollStatus.text = "Please tap 'Enroll My Voice' first."
+                    binding.tvSpeakerEnrollStatus.text = "Tap 'Enroll My Voice' first."
                     return@launch
                 }
-                binding.tvSpeakerEnrollStatus.text = "Testing voice match... Speak for 2.5 seconds."
+                binding.tvSpeakerEnrollStatus.text = "Testing voice match... Speak for 2.5s."
                 voiceManager.captureShortPcmSample(durationMs = 2500) { samples ->
                     if (samples == null) {
                         binding.tvSpeakerEnrollStatus.text = "Audio capture failed."
@@ -196,14 +242,9 @@ class VoiceSettingsActivity : AppCompatActivity() {
                             binding.tvSpeakerEnrollStatus.text =
                                 "Voice Matched! (Similarity: $scorePct%)"
                         }
-                        SpeakerVerifier.MatchStatus.UNCERTAIN,
-                        SpeakerVerifier.MatchStatus.DIFFERENT_SPEAKER -> {
-                            val warn = outcome.warningMessageBn.orEmpty()
-                            binding.tvSpeakerEnrollStatus.text = "$warn (Similarity: $scorePct%)"
-                            voiceManager.speak("Could not verify your voice. Please confirm manually.")
-                        }
-                        SpeakerVerifier.MatchStatus.NOT_ENROLLED -> {
-                            binding.tvSpeakerEnrollStatus.text = "Voice Status: Not Enrolled"
+                        else -> {
+                            binding.tvSpeakerEnrollStatus.text =
+                                "${outcome.warningMessageBn.orEmpty()} ($scorePct%)"
                         }
                     }
                 }

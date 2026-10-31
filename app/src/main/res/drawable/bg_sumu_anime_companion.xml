@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="400dp"
+    android:height="800dp"
+    android:viewportWidth="400"
+    android:viewportHeight="800">
+    <!-- Deep Atmospheric Midnight Sky -->
+    <path
+        android:fillColor="#070814"
+        android:pathData="M0,0h400v800h-400z" />
+    <!-- Soft Ambient Violet & Sakura Aura Glow behind Sumu -->
+    <path
+        android:fillColor="#1A103C"
+        android:pathData="M0,120 Q200,40 400,120 L400,680 Q200,760 0,680 Z" />
+    <path
+        android:fillColor="#267C3AED"
+        android:pathData="M200,200 m-160,0 a160,160 0,1 0,320 0 a160,160 0,1 0,-320 0" />
+    <path
+        android:fillColor="#1FEC4899"
+        android:pathData="M200,360 m-130,0 a130,130 0,1 0,260 0 a130,130 0,1 0,-260 0" />
+
+    <!-- Starlight Sparkles -->
+    <path android:fillColor="#66F472B6" android:pathData="M65,160 l4,8 l8,4 l-8,4 l-4,8 l-4,-8 l-8,-4 l8,-4 z" />
+    <path android:fillColor="#66818CF8" android:pathData="M335,190 l3,6 l6,3 l-6,3 l-3,6 l-3,-6 l-6,-3 l3,-6 z" />
+    <path android:fillColor="#55F472B6" android:pathData="M80,480 l3,6 l6,3 l-6,3 l-3,6 l-3,-6 l-6,-3 l3,-6 z" />
+    <path android:fillColor="#5538BDF8" android:pathData="M325,440 l4,7 l7,4 l-7,4 l-4,7 l-4,-7 l-7,-4 l7,-4 z" />
+
+    <!-- Sumu Anime Character Illustration (Full Upper Body & Flowing Hair) -->
+    <!-- Flowing Long Violet-Silver Hair (Back Layer) -->
+    <path
+        android:fillColor="#4C1D95"
+        android:pathData="M95,290 C85,180 140,140 200,140 C260,140 315,180 305,290 C318,410 335,520 310,610 L90,610 C65,520 82,410 95,290 Z" />
+    <path
+        android:fillColor="#6D28D9"
+        android:pathData="M110,285 C102,195 148,155 200,155 C252,155 298,195 290,285 C300,390 312,490 292,585 L108,585 C88,490 100,390 110,285 Z" />
+
+    <!-- Shoulders & Futuristic AI Companion Outfit -->
+    <path
+        android:fillColor="#FFE4E6"
+        android:pathData="M178,365 L222,365 L228,425 L172,425 Z" />
+    <path
+        android:fillColor="#1E1B4B"
+        android:pathData="M105,495 C120,425 155,405 200,405 C245,405 280,425 295,495 L315,620 L85,620 Z" />
+    <!-- Glowing Collar & Ribbon -->
+    <path
+        android:fillColor="#EC4899"
+        android:pathData="M168,412 L200,455 L232,412 L218,405 L200,432 L182,405 Z" />
+    <path
+        android:fillColor="#F472B6"
+        android:pathData="M200,448 L178,510 L196,515 L200,468 L204,515 L222,510 Z" />
+
+    <!-- Anime Face & Soft Blush -->
+    <path
+        android:fillColor="#FFF1F2"
+        android:pathData="M136,275 C136,205 164,185 200,185 C236,185 264,205 264,275 C264,335 232,378 200,384 C168,378 136,335 136,275 Z" />
+    <!-- Cheek Blush -->
+    <path
+        android:fillColor="#44FB7185"
+        android:pathData="M155,318 m-14,0 a14,7 0,1 0,28 0 a14,7 0,1 0,-28 0" />
+    <path
+        android:fillColor="#44FB7185"
+        android:pathData="M245,318 m-14,0 a14,7 0,1 0,28 0 a14,7 0,1 0,-28 0" />
+
+    <!-- Expressive Anime Eyes -->
+    <!-- Left Eye -->
+    <path
+        android:fillColor="#311042"
+        android:pathData="M150,282 C156,268 176,268 182,282 C182,300 175,308 166,308 C157,308 150,300 150,282 Z" />
+    <path
+        android:fillColor="#DB2777"
+        android:pathData="M156,286 C156,276 176,276 176,286 C176,300 171,306 166,306 C161,306 156,300 156,286 Z" />
+    <path
+        android:fillColor="#F472B6"
+        android:pathData="M160,294 C160,288 172,288 172,294 C172,302 169,305 166,305 C163,305 160,302 160,294 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M171,281 m-4.5,0 a4.5,4.5 0,1 0,9 0 a4.5,4.5 0,1 0,-9 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M159,297 m-2,0 a2,2 0,1 0,4 0 a2,2 0,1 0,-4 0" />
+
+    <!-- Right Eye -->
+    <path
+        android:fillColor="#311042"
+        android:pathData="M218,282 C224,268 244,268 250,282 C250,300 243,308 234,308 C225,308 218,300 218,282 Z" />
+    <path
+        android:fillColor="#DB2777"
+        android:pathData="M224,286 C224,276 244,276 244,286 C244,300 239,306 234,306 C229,306 224,300 224,286 Z" />
+    <path
+        android:fillColor="#F472B6"
+        android:pathData="M228,294 C228,288 240,288 240,294 C240,302 237,305 234,305 C231,305 228,302 228,294 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M239,281 m-4.5,0 a4.5,4.5 0,1 0,9 0 a4.5,4.5 0,1 0,-9 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M227,297 m-2,0 a2,2 0,1 0,4 0 a2,2 0,1 0,-4 0" />
+
+    <!-- Delicate Eyebrows & Warm Smile -->
+    <path
+        android:strokeColor="#5B21B6"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M152,262 Q166,256 180,261 M220,261 Q234,256 248,262" />
+    <path
+        android:strokeColor="#E11D48"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M188,344 Q200,354 212,344" />
+
+    <!-- Front Layered Anime Bangs (Lavender-Violet) -->
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M122,265 C128,185 162,162 200,162 C238,162 272,185 278,265 C262,232 246,255 236,276 C224,230 208,246 200,274 C190,234 174,244 164,276 C152,238 136,238 122,265 Z" />
+    <path
+        android:fillColor="#A78BFA"
+        android:pathData="M138,232 C155,185 178,174 200,174 C222,174 245,185 262,232 C244,208 228,220 218,242 C208,210 194,212 184,242 C170,214 152,212 138,232 Z" />
+
+    <!-- Futuristic Glowing AI Hair Accessories -->
+    <path
+        android:fillColor="#F472B6"
+        android:pathData="M114,246 L130,222 L140,254 Z M286,246 L270,222 L260,254 Z" />
+
+    <!-- Bottom Dark Translucent Vignette for Crisp Control Readability -->
+    <path
+        android:fillColor="#99070814"
+        android:pathData="M0,560 L400,560 L400,800 L0,800 Z" />
+</vector>

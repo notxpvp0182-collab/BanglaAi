@@ -19,6 +19,8 @@ import com.personal.bengaliagent.databinding.ActivityProviderSettingsBinding
 import com.personal.bengaliagent.domain.model.ConnectionState
 import com.personal.bengaliagent.domain.model.ErrorCategory
 import com.personal.bengaliagent.domain.model.ProviderType
+import com.personal.bengaliagent.data.security.CredentialRole
+import android.widget.LinearLayout
 import com.personal.bengaliagent.ui.memory.MemorySettingsActivity
 import com.personal.bengaliagent.ui.setup.SetupWizardActivity
 import com.personal.bengaliagent.ui.voice.VoiceSettingsActivity
@@ -301,15 +303,53 @@ class ProviderSettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun showMultiKeyRoleDialog(provider: ProviderType) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 10)
+        }
+        val etVoice = EditText(this).apply {
+            hint = "1. Voice API Key (Gemini Live)"
+            setText(keyStore.getApiKey(provider, CredentialRole.PRIMARY_VOICE).orEmpty())
+        }
+        val etIntel = EditText(this).apply {
+            hint = "2. Intelligence / Reasoning API Key"
+            setText(keyStore.getApiKey(provider, CredentialRole.INTELLIGENCE).orEmpty())
+        }
+        val etVision = EditText(this).apply {
+            hint = "3. Vision / Screen API Key"
+            setText(keyStore.getApiKey(provider, CredentialRole.VISION).orEmpty())
+        }
+        val etBackup = EditText(this).apply {
+            hint = "4. Backup Failover API Key"
+            setText(keyStore.getApiKey(provider, CredentialRole.BACKUP).orEmpty())
+        }
+        container.addView(etVoice)
+        container.addView(etIntel)
+        container.addView(etVision)
+        container.addView(etBackup)
+
+        AlertDialog.Builder(this)
+            .setTitle("${provider.displayName} — Multi-Key Credential Manager")
+            .setView(container)
+            .setPositiveButton("Save All Keys") { _, _ ->
+                keyStore.saveApiKey(provider, etVoice.text?.toString().orEmpty(), CredentialRole.PRIMARY_VOICE)
+                keyStore.saveApiKey(provider, etIntel.text?.toString().orEmpty(), CredentialRole.INTELLIGENCE)
+                keyStore.saveApiKey(provider, etVision.text?.toString().orEmpty(), CredentialRole.VISION)
+                keyStore.saveApiKey(provider, etBackup.text?.toString().orEmpty(), CredentialRole.BACKUP)
+                val count = keyStore.getKeysForRoleWithBackup(provider, CredentialRole.PRIMARY_VOICE).size
+                if (count > 0) keyStore.setProviderVerified(provider, true)
+                Toast.makeText(this, "Saved $count active key(s) for ${provider.displayName}", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun showDiscoveredModelCatalogDialog(provider: ProviderType, tvStatus: TextView) {
         lifecycleScope.launch {
             val cachedJson = prefs.getCachedModelsJson(provider)
             if (cachedJson.isNullOrBlank()) {
-                Toast.makeText(
-                    this@ProviderSettingsActivity,
-                    "Connect ${provider.displayName} first to load its model catalog.",
-                    Toast.LENGTH_SHORT
-                ).show()
+                showMultiKeyRoleDialog(provider)
                 return@launch
             }
 
