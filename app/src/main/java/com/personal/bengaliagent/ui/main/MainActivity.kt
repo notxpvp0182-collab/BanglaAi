@@ -121,30 +121,26 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshHomeProviderSummary() {
         lifecycleScope.launch {
-            val preferred = prefs.getPreferredProvider()
-            val geminiVerified = keyStore.isProviderVerified(ProviderType.GEMINI)
-            val grokVerified = keyStore.isProviderVerified(ProviderType.GROK)
-
-            val activeProvider = when {
-                preferred == ProviderType.GROK && grokVerified -> ProviderType.GROK
-                geminiVerified -> ProviderType.GEMINI
-                grokVerified -> ProviderType.GROK
-                else -> null
-            }
-
-            if (activeProvider != null) {
-                val liveModel = prefs.getLiveVoiceModel(activeProvider) ?: "Auto Live Audio"
-                binding.tvSelectedProviderModel.text = "${activeProvider.displayName} • $liveModel"
-                binding.tvAgentState.text = "Connected • Ready"
+            val connectedList = router.getConnectedProviders()
+            if (connectedList.isNotEmpty()) {
+                val badgeText = if (connectedList.size > 1) {
+                    "Multi-AI Active: " + connectedList.joinToString(" + ") { it.displayName }
+                } else {
+                    val single = connectedList.first()
+                    val m = prefs.getVerifiedModel(single) ?: "Ready"
+                    "${single.displayName} • $m"
+                }
+                binding.tvSelectedProviderModel.text = badgeText
+                binding.tvAgentState.text = "Connected • Ready (${connectedList.size} AI)"
                 binding.tvAgentState.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_green))
                 binding.tvHomeConnectionSubtitle.text =
-                    "Tap Call AI for real-time Bengali & English voice conversation"
+                    "Tap Call AI to talk with your active AI agent(s) in real time"
             } else {
                 binding.tvSelectedProviderModel.text = "No Provider Connected • Tap Settings"
                 binding.tvAgentState.text = "Disconnected"
                 binding.tvAgentState.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_amber))
                 binding.tvHomeConnectionSubtitle.text =
-                    "Open Settings in the top-right corner to connect Google Gemini or xAI Grok"
+                    "Open Settings in the top-right corner to connect Gemini, Groq, OpenRouter, or OpenAI"
             }
         }
     }

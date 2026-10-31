@@ -37,5 +37,6 @@ object KeyValidator {
             .replace(Regex("xai-[0-9A-Za-z\\-_]{12,}"), "xai-***REDACTED***")
             .replace(Regex("gsk_[0-9A-Za-z]{12,}"), "gsk_***REDACTED***")
             .replace(Regex("sk-or-[0-9A-Za-z\\-_]{12,}"), "sk-or-***REDACTED***")
+            .replace(Regex("sk-[0-9A-Za-z\\-_]{16,}"), "sk-***REDACTED***")
     }
 }

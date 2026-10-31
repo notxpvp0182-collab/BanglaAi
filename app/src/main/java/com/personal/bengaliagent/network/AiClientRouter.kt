@@ -3,9 +3,11 @@ package com.personal.bengaliagent.network
 import com.personal.bengaliagent.data.prefs.AppPreferences
 import com.personal.bengaliagent.data.security.SecureKeyStore
 import com.personal.bengaliagent.domain.model.ChatMessage
-import com.personal.bengaliagent.domain.model.ErrorCategory
 import com.personal.bengaliagent.domain.model.ProviderTestResult
 import com.personal.bengaliagent.domain.model.ProviderType
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -21,11 +23,10 @@ class AiClientRouter(
         val providerUsed: ProviderType?
     )
 
-    data class LiveCallEndpointConfig(
+    data class AgentVoiceReply(
         val provider: ProviderType,
-        val apiKey: String,
-        val liveModelId: String,
-        val fallbackModels: List<String>
+        val modelId: String,
+        val spokenText: String
     )
 
     suspend fun connectAndVerifyGemini(rawKey: String): ProviderTestResult =
@@ -45,7 +46,6 @@ class AiClientRouter(
             preferences.setPreferredProvider(provider)
             preferences.setLastConnectionMessage(result.userMessage)
 
-            // Cache discovered model catalog JSON for instant startup
             val arr = JSONArray()
             result.discoveredModels.forEach { m ->
                 arr.put(
@@ -72,118 +72,109 @@ class AiClientRouter(
         preferences.setLiveVoiceModel(provider, null)
     }
 
-    suspend fun disconnectGemini() = disconnectProvider(ProviderType.GEMINI)
+    fun getConnectedProviders(): List<ProviderType> {
+        return ProviderType.entries.filter { p ->
+            !keyStore.getApiKey(p).isNullOrBlank() && keyStore.isProviderVerified(p)
+        }.ifEmpty {
+            ProviderType.entries.filter { p -> !keyStore.getApiKey(p).isNullOrBlank() }
+        }
+    }
 
     /**
-     * Resolves the prioritized list of real-time voice call endpoints (Primary -> Secondary -> Provider Failover).
+     * Queries either the primary connected AI agent OR multiple connected AI agents in parallel
+     * when Multi-AI Agent Mode is enabled!
      */
-    suspend fun resolveLiveCallCandidates(): List<LiveCallEndpointConfig> {
-        val preferred = preferences.getPreferredProvider()
-        val providerOrder = listOf(preferred, ProviderType.GEMINI, ProviderType.GROK).distinct()
-        val configs = mutableListOf<LiveCallEndpointConfig>()
+    suspend fun queryActiveCallAgents(
+        messages: List<ChatMessage>,
+        base64JpegImage: String? = null,
+        multiAgentMode: Boolean = true
+    ): List<AgentVoiceReply> = coroutineScope {
+        val connected = getConnectedProviders()
+        if (connected.isEmpty()) return@coroutineScope emptyList()
 
-        for (p in providerOrder) {
-            if (p != ProviderType.GEMINI && p != ProviderType.GROK) continue
-            val key = keyStore.getApiKey(p)?.takeIf { it.isNotBlank() } ?: continue
-            val savedLiveModel = preferences.getLiveVoiceModel(p)
-            if (p == ProviderType.GEMINI) {
-                val primary = savedLiveModel?.removePrefix("vertex-v1:")
-                    ?: "gemini-2.0-flash-exp"
-                val fallbacks = listOf(
-                    primary,
-                    "gemini-2.0-flash-exp",
-                    "gemini-2.0-flash",
-                    "gemini-2.5-flash"
-                ).distinct()
-                configs.add(
-                    LiveCallEndpointConfig(
-                        provider = ProviderType.GEMINI,
-                        apiKey = key,
-                        liveModelId = fallbacks.first(),
-                        fallbackModels = fallbacks.drop(1)
-                    )
+        val preferred = preferences.getPreferredProvider()
+        val ordered = (listOf(preferred) + connected).distinct().filter { connected.contains(it) }
+
+        val targetAgents = if (multiAgentMode && ordered.size > 1) {
+            ordered.take(3) // Up to 3 AI agents speaking & working together simultaneously
+        } else {
+            ordered.take(1)
+        }
+
+        val deferredReplies = targetAgents.map { provider ->
+            async {
+                val apiKey = keyStore.getApiKey(provider) ?: return@async null
+                val modelId = preferences.getVerifiedModel(provider)
+                    ?: preferences.getLiveVoiceModel(provider)
+                    ?: defaultModelFor(provider)
+
+                val resp = client.sendChatWithBoundedRetry(
+                    provider = provider,
+                    apiKey = apiKey,
+                    modelName = modelId,
+                    messages = messages,
+                    maxRetries = 1,
+                    base64JpegImage = base64JpegImage
                 )
-            } else if (p == ProviderType.GROK) {
-                val primary = savedLiveModel ?: "grok-2-public"
-                configs.add(
-                    LiveCallEndpointConfig(
-                        provider = ProviderType.GROK,
-                        apiKey = key,
-                        liveModelId = primary,
-                        fallbackModels = listOf("grok-2-latest", "grok-beta")
+                if (resp.isSuccess && resp.replyText.isNotBlank()) {
+                    AgentVoiceReply(
+                        provider = provider,
+                        modelId = modelId.substringAfter(":"),
+                        spokenText = resp.replyText
                     )
+                } else {
+                    null
+                }
+            }
+        }
+
+        val results = deferredReplies.awaitAll().filterNotNull()
+        if (results.isNotEmpty()) return@coroutineScope results
+
+        // Fallback: if the primary failed and we weren't in multi-agent mode, try remaining connected providers
+        for (fallbackProvider in ordered.drop(targetAgents.size)) {
+            val apiKey = keyStore.getApiKey(fallbackProvider) ?: continue
+            val modelId = preferences.getVerifiedModel(fallbackProvider) ?: defaultModelFor(fallbackProvider)
+            val resp = client.sendChatWithBoundedRetry(
+                provider = fallbackProvider,
+                apiKey = apiKey,
+                modelName = modelId,
+                messages = messages,
+                maxRetries = 0,
+                base64JpegImage = base64JpegImage
+            )
+            if (resp.isSuccess && resp.replyText.isNotBlank()) {
+                return@coroutineScope listOf(
+                    AgentVoiceReply(fallbackProvider, modelId, resp.replyText)
                 )
             }
         }
-        return configs
+
+        emptyList()
     }
 
     suspend fun sendMessageWithFailover(
         messages: List<ChatMessage>,
         base64JpegImage: String? = null
     ): RoutedResponse {
-        if (!preferences.isCloudSharingConsented()) {
-            return RoutedResponse(
-                success = false,
-                replyText = "Cloud AI data sharing is disabled in Settings.",
-                providerUsed = null
+        val replies = queryActiveCallAgents(messages, base64JpegImage, multiAgentMode = false)
+        val first = replies.firstOrNull()
+        return if (first != null) {
+            RoutedResponse(true, first.spokenText, first.provider)
+        } else {
+            RoutedResponse(
+                false,
+                "No AI provider responded. Check your API keys in Settings.",
+                null
             )
         }
+    }
 
-        val preferred = preferences.getPreferredProvider()
-        val orderedProviders = (listOf(preferred) + ProviderType.entries).distinct()
-        val configuredProviders = orderedProviders.filter {
-            !keyStore.getApiKey(it).isNullOrBlank()
-        }
-
-        if (configuredProviders.isEmpty()) {
-            return RoutedResponse(
-                success = false,
-                replyText = "No AI provider connected. Open Settings to connect Google Gemini or xAI Grok.",
-                providerUsed = null
-            )
-        }
-
-        val errors = mutableListOf<String>()
-        for (provider in configuredProviders) {
-            val apiKey = keyStore.getApiKey(provider) ?: continue
-            var modelId = preferences.getVerifiedModel(provider)
-
-            if (modelId.isNullOrBlank()) {
-                val discovery = client.discoverAndVerifyProvider(provider, apiKey)
-                if (discovery.success && !discovery.verifiedModel.isNullOrBlank()) {
-                    modelId = discovery.verifiedModel
-                    preferences.setVerifiedModel(provider, modelId)
-                } else {
-                    errors.add("${provider.displayName}: ${discovery.userMessage}")
-                    continue
-                }
-            }
-
-            val response = client.sendChatWithBoundedRetry(
-                provider = provider,
-                apiKey = apiKey,
-                modelName = modelId,
-                messages = messages,
-                maxRetries = 1,
-                base64JpegImage = base64JpegImage
-            )
-
-            if (response.isSuccess) {
-                return RoutedResponse(
-                    success = true,
-                    replyText = response.replyText,
-                    providerUsed = provider
-                )
-            } else {
-                errors.add(response.errorMessage)
-            }
-        }
-
-        return RoutedResponse(
-            success = false,
-            replyText = errors.joinToString("\n"),
-            providerUsed = null
-        )
+    private fun defaultModelFor(provider: ProviderType): String = when (provider) {
+        ProviderType.GEMINI -> "gemini-2.5-flash"
+        ProviderType.GROQ -> "llama-3.3-70b-versatile"
+        ProviderType.OPENROUTER -> "google/gemini-2.5-flash"
+        ProviderType.OPENAI -> "gpt-4o-mini"
+        ProviderType.GROK -> "grok-3-mini-fast"
     }
 }

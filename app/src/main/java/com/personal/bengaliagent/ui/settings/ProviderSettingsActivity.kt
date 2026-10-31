@@ -42,6 +42,7 @@ class ProviderSettingsActivity : AppCompatActivity() {
 
         setupCapabilityTogglesAndNavigation()
 
+        // 1. Google Gemini
         setupProviderBlock(
             provider = ProviderType.GEMINI,
             etKey = binding.etGeminiKey,
@@ -54,8 +55,9 @@ class ProviderSettingsActivity : AppCompatActivity() {
             btnInspectCatalog = binding.btnInspectGeminiModels
         )
 
+        // 2. Groq Cloud (gsk_...)
         setupProviderBlock(
-            provider = ProviderType.GROK,
+            provider = ProviderType.GROQ,
             etKey = binding.etGroqKey,
             cbShow = binding.cbShowGroqKey,
             tvBadge = binding.tvGroqBadge,
@@ -64,6 +66,45 @@ class ProviderSettingsActivity : AppCompatActivity() {
             btnDisconnect = binding.btnDisconnectGroq,
             btnRetry = null,
             btnInspectCatalog = binding.btnInspectGrokModels
+        )
+
+        // 3. OpenRouter (sk-or-...)
+        setupProviderBlock(
+            provider = ProviderType.OPENROUTER,
+            etKey = binding.etOpenRouterKey,
+            cbShow = binding.cbShowOpenRouterKey,
+            tvBadge = binding.tvOpenRouterBadge,
+            tvStatus = binding.tvOpenRouterStatus,
+            btnConnect = binding.btnConnectOpenRouter,
+            btnDisconnect = binding.btnDisconnectOpenRouter,
+            btnRetry = null,
+            btnInspectCatalog = binding.btnInspectOpenRouterModels
+        )
+
+        // 4. OpenAI (sk-...)
+        setupProviderBlock(
+            provider = ProviderType.OPENAI,
+            etKey = binding.etOpenAiKey,
+            cbShow = binding.cbShowOpenAiKey,
+            tvBadge = binding.tvOpenAiBadge,
+            tvStatus = binding.tvOpenAiStatus,
+            btnConnect = binding.btnConnectOpenAi,
+            btnDisconnect = binding.btnDisconnectOpenAi,
+            btnRetry = null,
+            btnInspectCatalog = binding.btnInspectOpenAiModels
+        )
+
+        // 5. xAI Grok (xai-...)
+        setupProviderBlock(
+            provider = ProviderType.GROK,
+            etKey = binding.etXaiGrokKey,
+            cbShow = binding.cbShowXaiGrokKey,
+            tvBadge = binding.tvXaiGrokBadge,
+            tvStatus = binding.tvXaiGrokStatus,
+            btnConnect = binding.btnConnectXaiGrok,
+            btnDisconnect = binding.btnDisconnectXaiGrok,
+            btnRetry = null,
+            btnInspectCatalog = binding.btnInspectXaiGrokModels
         )
 
         binding.btnCloseSettings.setOnClickListener { finish() }
@@ -125,13 +166,12 @@ class ProviderSettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val isVerified = keyStore.isProviderVerified(provider)
             val activeModel = prefs.getVerifiedModel(provider)
-            val voiceModel = prefs.getLiveVoiceModel(provider)
             if (isVerified && !activeModel.isNullOrBlank()) {
                 renderConnectionState(
                     tvBadge,
                     tvStatus,
                     state = ConnectionState.CONNECTED,
-                    detail = "Active: $activeModel | Voice Call: ${voiceModel ?: activeModel}"
+                    detail = "Connected • Model: $activeModel"
                 )
             } else {
                 renderConnectionState(
@@ -267,7 +307,7 @@ class ProviderSettingsActivity : AppCompatActivity() {
             if (cachedJson.isNullOrBlank()) {
                 Toast.makeText(
                     this@ProviderSettingsActivity,
-                    "Connect ${provider.displayName} first to load its live model catalog.",
+                    "Connect ${provider.displayName} first to load its model catalog.",
                     Toast.LENGTH_SHORT
                 ).show()
                 return@launch
@@ -280,27 +320,20 @@ class ProviderSettingsActivity : AppCompatActivity() {
                 val obj = arr.getJSONObject(i)
                 val id = obj.optString("id")
                 val speed = obj.optString("speedTier", "Fast")
-                val live = if (obj.optBoolean("supportsLiveAudio")) "Live Audio ✓" else "Text/Vision"
-                val vision = if (obj.optBoolean("supportsVision")) "Vision ✓" else ""
-                "$id\n[$speed • $live • $vision]"
+                val vision = if (obj.optBoolean("supportsVision")) "Vision ✓" else "Text"
+                "$id [$speed • $vision]"
             }
 
             AlertDialog.Builder(this@ProviderSettingsActivity)
-                .setTitle("${provider.displayName} — Discovered Models")
+                .setTitle("${provider.displayName} — Select Active Model")
                 .setItems(labels) { _, which ->
                     val chosenObj = arr.getJSONObject(which)
                     val chosenId = chosenObj.optString("id")
-                    val supportsLive = chosenObj.optBoolean("supportsLiveAudio", false)
                     lifecycleScope.launch {
-                        prefs.setAutoModelSelectionEnabled(false)
-                        binding.cbAutoModelSelection.isChecked = false
                         prefs.setVerifiedModel(provider, chosenId)
-                        if (supportsLive) {
-                            prefs.setLiveVoiceModel(provider, chosenId)
-                        }
+                        prefs.setLiveVoiceModel(provider, chosenId)
                         prefs.setPreferredProvider(provider)
-                        val voiceModel = prefs.getLiveVoiceModel(provider) ?: chosenId
-                        tvStatus.text = "Selected: $chosenId | Voice Call: $voiceModel"
+                        tvStatus.text = "Selected Model: $chosenId"
                     }
                 }
                 .setNegativeButton("Close", null)

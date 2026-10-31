@@ -32,16 +32,72 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Google Gemini &amp; xAI Grok Model Center • Dynamic Capability Discovery"
+                android:text="Multi-AI Agent Calling Hub • Connect Gemini, Groq, OpenRouter, OpenAI &amp; xAI Grok"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 1. GOOGLE GEMINI PROVIDER & MODEL CENTER -->
+        <!-- MULTI-AI AGENT CONFERENCE CALL & SCREEN CONTROL SWITCHES -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="@dimen/card_padding">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Multi-AI Agent &amp; Screen Capabilities"
+                android:textColor="@color/accent_cyan"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <CheckBox
+                android:id="@+id/cbAutoModelSelection"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="6dp"
+                android:checked="true"
+                android:text="Multi-AI Agent Call Mode (All connected AIs work &amp; speak together)"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <CheckBox
+                android:id="@+id/cbAiCodingCapability"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:checked="true"
+                android:text="Enable AI Coding in External Apps"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <CheckBox
+                android:id="@+id/cbAiVideoCapability"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:checked="true"
+                android:text="Enable AI Video Editing via Screen Control"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <CheckBox
+                android:id="@+id/cbCloudConsent"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:checked="true"
+                android:text="Allow sending voice &amp; shared screen frames to connected AIs"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 1. GOOGLE GEMINI -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
             android:padding="@dimen/card_padding">
@@ -59,7 +115,7 @@
                     android:layout_weight="1"
                     android:text="@string/provider_label_gemini"
                     android:textColor="@color/text_primary"
-                    android:textSize="18sp"
+                    android:textSize="17sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -78,13 +134,13 @@
             <EditText
                 android:id="@+id/etGeminiKey"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:layout_marginTop="10dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
                 android:background="@drawable/bg_badge"
                 android:hint="@string/hint_enter_gemini_api_key"
                 android:importantForAutofill="no"
                 android:inputType="textPassword"
-                android:paddingHorizontal="14dp"
+                android:paddingHorizontal="12dp"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_muted"
                 android:textSize="13sp" />
@@ -92,8 +148,8 @@
             <CheckBox
                 android:id="@+id/cbShowGeminiKey"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:text="Show API Key"
+                android:layout_height="38dp"
+                android:text="Show Key"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
@@ -109,8 +165,7 @@
                 android:id="@+id/tvGeminiStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Enter any valid Google Gemini API key (no prefix restrictions)."
+                android:text="Supports AIza and AQ. keys."
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
@@ -118,30 +173,30 @@
                 android:id="@+id/btnConnectGemini"
                 style="@style/Widget.BengaliAgent.Button.Primary"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="10dp"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
                 android:text="@string/action_connect_gemini" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 android:orientation="horizontal">
 
                 <Button
                     android:id="@+id/btnInspectGeminiModels"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="38dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
-                    android:text="Model Catalog" />
+                    android:text="Models" />
 
                 <Button
                     android:id="@+id/btnRetryGemini"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="38dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
                     android:text="@string/action_retry"
@@ -151,17 +206,17 @@
                     android:id="@+id/btnDisconnectGemini"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="38dp"
                     android:layout_weight="1"
                     android:text="@string/action_disconnect" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- 2. xAI GROK PROVIDER & MODEL CENTER -->
+        <!-- 2. GROQ CLOUD (gsk_...) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
             android:padding="@dimen/card_padding">
@@ -176,9 +231,9 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="xAI Grok"
+                    android:text="Groq Cloud (gsk_...)"
                     android:textColor="@color/text_primary"
-                    android:textSize="18sp"
+                    android:textSize="17sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -197,13 +252,13 @@
             <EditText
                 android:id="@+id/etGroqKey"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:layout_marginTop="10dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
                 android:background="@drawable/bg_badge"
-                android:hint="Enter xAI Grok API Key"
+                android:hint="Enter Groq Cloud API Key (gsk_...)"
                 android:importantForAutofill="no"
                 android:inputType="textPassword"
-                android:paddingHorizontal="14dp"
+                android:paddingHorizontal="12dp"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_muted"
                 android:textSize="13sp" />
@@ -211,8 +266,8 @@
             <CheckBox
                 android:id="@+id/cbShowGroqKey"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:text="Show API Key"
+                android:layout_height="38dp"
+                android:text="Show Key"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
@@ -220,8 +275,7 @@
                 android:id="@+id/tvGroqStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Dynamic discovery via GET https://api.x.ai/v1/models"
+                android:text="Ultra-fast Llama 3.3 70B &amp; Llama 4 on Groq Cloud"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
@@ -229,95 +283,340 @@
                 android:id="@+id/btnConnectGroq"
                 style="@style/Widget.BengaliAgent.Button.Primary"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="10dp"
-                android:text="Connect xAI Grok" />
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:text="Connect Groq Cloud" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 android:orientation="horizontal">
 
                 <Button
                     android:id="@+id/btnInspectGrokModels"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="38dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
-                    android:text="Model Catalog" />
+                    android:text="Models" />
 
                 <Button
                     android:id="@+id/btnDisconnectGroq"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="38dp"
                     android:layout_weight="1"
                     android:text="Disconnect" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- 3. MODEL SELECTION MODE & CAPABILITIES -->
+        <!-- 3. OPENROUTER (sk-or-...) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
             android:padding="@dimen/card_padding">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Model Selection &amp; Screen Control"
-                android:textColor="@color/accent_cyan"
-                android:textSize="16sp"
-                android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="OpenRouter (sk-or-...)"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvOpenRouterBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:text="Disconnected"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etOpenRouterKey"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_badge"
+                android:hint="Enter OpenRouter API Key (sk-or-...)"
+                android:importantForAutofill="no"
+                android:inputType="textPassword"
+                android:paddingHorizontal="12dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_muted"
+                android:textSize="13sp" />
 
             <CheckBox
-                android:id="@+id/cbAutoModelSelection"
+                android:id="@+id/cbShowOpenRouterKey"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:text="Show Key"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvOpenRouterStatus"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
+                android:layout_height="wrap_content"
+                android:text="Connects to Gemini, Claude, GPT, and Llama via OpenRouter"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnConnectOpenRouter"
+                style="@style/Widget.BengaliAgent.Button.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:text="Connect OpenRouter" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:checked="true"
-                android:text="Auto Model Selection (Prioritize Live Audio &amp; Ultra-Fast Models)"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp" />
+                android:orientation="horizontal">
 
-            <CheckBox
-                android:id="@+id/cbAiCodingCapability"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:checked="true"
-                android:text="Enable AI Coding in External Apps"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp" />
+                <Button
+                    android:id="@+id/btnInspectOpenRouterModels"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:text="Models" />
 
-            <CheckBox
-                android:id="@+id/cbAiVideoCapability"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:checked="true"
-                android:text="Enable AI Video Editing via Screen Control"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp" />
-
-            <CheckBox
-                android:id="@+id/cbCloudConsent"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:checked="true"
-                android:text="Allow real-time audio &amp; authorized screen frames over TLS"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp" />
+                <Button
+                    android:id="@+id/btnDisconnectOpenRouter"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="Disconnect" />
+            </LinearLayout>
         </LinearLayout>
 
-        <!-- 4. PERMISSIONS, VOICE & MEMORY -->
+        <!-- 4. OPENAI (sk-...) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="@dimen/card_padding">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="OpenAI (GPT-4o / Mini)"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvOpenAiBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:text="Disconnected"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etOpenAiKey"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_badge"
+                android:hint="Enter OpenAI API Key (sk-...)"
+                android:importantForAutofill="no"
+                android:inputType="textPassword"
+                android:paddingHorizontal="12dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_muted"
+                android:textSize="13sp" />
+
+            <CheckBox
+                android:id="@+id/cbShowOpenAiKey"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:text="Show Key"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvOpenAiStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Official OpenAI API (GPT-4o, GPT-4.1 Mini)"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnConnectOpenAi"
+                style="@style/Widget.BengaliAgent.Button.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:text="Connect OpenAI" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnInspectOpenAiModels"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:text="Models" />
+
+                <Button
+                    android:id="@+id/btnDisconnectOpenAi"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="Disconnect" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 5. xAI GROK (xai-...) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="@dimen/card_padding">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="xAI Grok (xai-...)"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvXaiGrokBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:text="Disconnected"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etXaiGrokKey"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_badge"
+                android:hint="Enter xAI Grok Key (xai-...)"
+                android:importantForAutofill="no"
+                android:inputType="textPassword"
+                android:paddingHorizontal="12dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_muted"
+                android:textSize="13sp" />
+
+            <CheckBox
+                android:id="@+id/cbShowXaiGrokKey"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:text="Show Key"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvXaiGrokStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Official xAI Grok API (https://api.x.ai/v1)"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnConnectXaiGrok"
+                style="@style/Widget.BengaliAgent.Button.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:text="Connect xAI Grok" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnInspectXaiGrokModels"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:text="Models" />
+
+                <Button
+                    android:id="@+id/btnDisconnectXaiGrok"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:layout_weight="1"
+                    android:text="Disconnect" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- PERMISSIONS, VOICE & MEMORY -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
             android:padding="@dimen/card_padding">
@@ -334,21 +633,21 @@
                 android:id="@+id/btnOpenPermissionsHub"
                 style="@style/Widget.BengaliAgent.Button.Primary"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="10dp"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
                 android:text="Permissions &amp; Accessibility Status" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 android:orientation="horizontal">
 
                 <Button
                     android:id="@+id/btnOpenVoiceHub"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="38dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
                     android:text="Voice Settings" />
@@ -357,7 +656,7 @@
                     android:id="@+id/btnOpenMemoryHub"
                     style="@style/Widget.BengaliAgent.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="38dp"
                     android:layout_weight="1"
                     android:text="Memory Brain" />
             </LinearLayout>
@@ -368,7 +667,7 @@
             style="@style/Widget.BengaliAgent.Button.Secondary"
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="14dp"
             android:text="Back to Calling Screen" />
 
     </LinearLayout>
