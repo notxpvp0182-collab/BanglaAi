@@ -14,12 +14,15 @@ import androidx.lifecycle.lifecycleScope
 import com.personal.bengaliagent.AgentApp
 import com.personal.bengaliagent.R
 import com.personal.bengaliagent.databinding.ActivityProviderSettingsBinding
+import com.personal.bengaliagent.domain.model.ConnectionState
+import com.personal.bengaliagent.domain.model.ErrorCategory
 import com.personal.bengaliagent.domain.model.ProviderType
 import com.personal.bengaliagent.ui.memory.MemorySettingsActivity
 import com.personal.bengaliagent.ui.setup.SetupWizardActivity
 import com.personal.bengaliagent.ui.voice.VoiceSettingsActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class ProviderSettingsActivity : AppCompatActivity() {
 
@@ -121,22 +124,18 @@ class ProviderSettingsActivity : AppCompatActivity() {
 
         val isVerified = keyStore.isProviderVerified(provider)
         if (isVerified) {
-            renderBadgeAndStatus(
+            renderConnectionState(
                 tvBadge,
                 tvStatus,
-                badgeText = "Connected",
-                badgeColorRes = R.color.accent_green,
-                statusText = "Connected and verified (${provider.displayName})",
-                statusColorRes = R.color.accent_green
+                state = ConnectionState.CONNECTED,
+                detail = "Connected and verified (${provider.displayName})"
             )
         } else {
-            renderBadgeAndStatus(
+            renderConnectionState(
                 tvBadge,
                 tvStatus,
-                badgeText = "Not Connected",
-                badgeColorRes = R.color.text_secondary,
-                statusText = "Status: Enter your ${provider.displayName} API key and tap Connect.",
-                statusColorRes = R.color.text_secondary
+                state = ConnectionState.DISCONNECTED,
+                detail = "Enter your ${provider.displayName} API key and tap Connect."
             )
         }
 
@@ -152,49 +151,83 @@ class ProviderSettingsActivity : AppCompatActivity() {
         val connectAction = View.OnClickListener {
             if (connectJob?.isActive == true) return@OnClickListener
             val rawKey = etKey.text?.toString()?.trim().orEmpty()
-
-            connectJob = lifecycleScope.launch {
-                btnConnect.isEnabled = false
-                btnRetry?.isEnabled = false
-                if (provider == ProviderType.GEMINI) {
-                    binding.progressConnecting.visibility = View.VISIBLE
-                }
-                renderBadgeAndStatus(
+            if (rawKey.isEmpty()) {
+                renderConnectionState(
                     tvBadge,
                     tvStatus,
-                    badgeText = "Connecting...",
-                    badgeColorRes = R.color.accent_amber,
-                    statusText = "Discovering available models & verifying ${provider.displayName}...",
-                    statusColorRes = R.color.text_secondary
+                    state = ConnectionState.AUTHENTICATION_ERROR,
+                    detail = "API key cannot be empty. Please enter your ${provider.displayName} key."
                 )
+                return@OnClickListener
+            }
 
-                val result = router.connectAndVerifyProvider(provider, rawKey)
-                btnConnect.isEnabled = true
-                btnRetry?.isEnabled = true
-                if (provider == ProviderType.GEMINI) {
-                    binding.progressConnecting.visibility = View.GONE
-                }
-
-                if (result.success) {
-                    btnRetry?.visibility = View.GONE
-                    renderBadgeAndStatus(
+            connectJob = lifecycleScope.launch {
+                try {
+                    btnConnect.isEnabled = false
+                    btnRetry?.isEnabled = false
+                    if (provider == ProviderType.GEMINI) {
+                        binding.progressConnecting.visibility = View.VISIBLE
+                    }
+                    renderConnectionState(
                         tvBadge,
                         tvStatus,
-                        badgeText = "Connected",
-                        badgeColorRes = R.color.accent_green,
-                        statusText = result.userMessage,
-                        statusColorRes = R.color.accent_green
+                        state = if (btnRetry?.visibility == View.VISIBLE) {
+                            ConnectionState.RECONNECTING
+                        } else {
+                            ConnectionState.CONNECTING
+                        },
+                        detail = "Verifying ${provider.displayName} API key and model availability..."
                     )
-                } else {
+
+                    // Hard 15-second timeout prevents infinite "Connecting..." hangs
+                    val result = withTimeoutOrNull(15_000L) {
+                        router.connectAndVerifyProvider(provider, rawKey)
+                    }
+
+                    if (result == null) {
+                        btnRetry?.visibility = View.VISIBLE
+                        renderConnectionState(
+                            tvBadge,
+                            tvStatus,
+                            state = ConnectionState.NETWORK_ERROR,
+                            detail = "Connection timed out after 15 seconds. Please check your internet connection and tap Retry."
+                        )
+                    } else if (result.success) {
+                        btnRetry?.visibility = View.GONE
+                        renderConnectionState(
+                            tvBadge,
+                            tvStatus,
+                            state = ConnectionState.CONNECTED,
+                            detail = result.userMessage
+                        )
+                    } else {
+                        btnRetry?.visibility = View.VISIBLE
+                        val errState = when (result.errorCategory) {
+                            ErrorCategory.INVALID_KEY,
+                            ErrorCategory.PERMISSION_DENIED -> ConnectionState.AUTHENTICATION_ERROR
+                            else -> ConnectionState.NETWORK_ERROR
+                        }
+                        renderConnectionState(
+                            tvBadge,
+                            tvStatus,
+                            state = errState,
+                            detail = result.userMessage
+                        )
+                    }
+                } catch (e: Exception) {
                     btnRetry?.visibility = View.VISIBLE
-                    renderBadgeAndStatus(
+                    renderConnectionState(
                         tvBadge,
                         tvStatus,
-                        badgeText = "Connection Failed",
-                        badgeColorRes = R.color.accent_red,
-                        statusText = result.userMessage,
-                        statusColorRes = R.color.accent_amber
+                        state = ConnectionState.NETWORK_ERROR,
+                        detail = "Connection error: ${e.localizedMessage ?: e.javaClass.simpleName}"
                     )
+                } finally {
+                    btnConnect.isEnabled = true
+                    btnRetry?.isEnabled = true
+                    if (provider == ProviderType.GEMINI) {
+                        binding.progressConnecting.visibility = View.GONE
+                    }
                 }
             }
         }
@@ -208,30 +241,38 @@ class ProviderSettingsActivity : AppCompatActivity() {
                 router.disconnectProvider(provider)
                 etKey.setText("")
                 btnRetry?.visibility = View.GONE
-                renderBadgeAndStatus(
+                if (provider == ProviderType.GEMINI) {
+                    binding.progressConnecting.visibility = View.GONE
+                }
+                renderConnectionState(
                     tvBadge,
                     tvStatus,
-                    badgeText = "Not Connected",
-                    badgeColorRes = R.color.text_secondary,
-                    statusText = "Disconnected from ${provider.displayName}.",
-                    statusColorRes = R.color.text_secondary
+                    state = ConnectionState.DISCONNECTED,
+                    detail = "Disconnected from ${provider.displayName}."
                 )
             }
         }
     }
 
-    private fun renderBadgeAndStatus(
+    private fun renderConnectionState(
         tvBadge: TextView,
         tvStatus: TextView,
-        badgeText: String,
-        badgeColorRes: Int,
-        statusText: String,
-        statusColorRes: Int
+        state: ConnectionState,
+        detail: String
     ) {
-        tvBadge.text = badgeText
-        tvBadge.setTextColor(ContextCompat.getColor(this, badgeColorRes))
-        tvStatus.text = statusText
-        tvStatus.setTextColor(ContextCompat.getColor(this, statusColorRes))
+        tvBadge.text = state.displayLabel
+        val colorRes = when (state) {
+            ConnectionState.CONNECTED -> R.color.accent_green
+            ConnectionState.INITIALIZING,
+            ConnectionState.CONNECTING,
+            ConnectionState.RECONNECTING -> R.color.accent_cyan
+            ConnectionState.DISCONNECTED -> R.color.text_secondary
+            ConnectionState.AUTHENTICATION_ERROR,
+            ConnectionState.NETWORK_ERROR -> R.color.accent_red_bright
+        }
+        tvBadge.setTextColor(ContextCompat.getColor(this, colorRes))
+        tvStatus.text = detail
+        tvStatus.setTextColor(ContextCompat.getColor(this, colorRes))
     }
 
     override fun onDestroy() {

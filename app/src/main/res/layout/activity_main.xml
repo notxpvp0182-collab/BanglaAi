@@ -4,16 +4,16 @@
     android:layout_height="match_parent"
     android:background="@color/bg_black"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:padding="12dp">
 
-    <!-- Compact Top Bar -->
+    <!-- 1. AI Assistant Identity & Connection Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_header_gradient"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="12dp"
+        android:paddingHorizontal="14dp"
         android:paddingVertical="10dp">
 
         <LinearLayout
@@ -27,16 +27,16 @@
                 android:layout_height="wrap_content"
                 android:text="@string/app_name"
                 android:textColor="@color/text_primary"
-                android:textSize="16sp"
+                android:textSize="17sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/tvAgentState"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:text="Ready"
-                android:textColor="@color/accent_green"
+                android:layout_marginTop="2dp"
+                android:text="Idle • Ready"
+                android:textColor="@color/accent_cyan"
                 android:textSize="12sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -45,80 +45,184 @@
             android:id="@+id/tvPrivacyIndicator"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="10dp"
             android:background="@drawable/bg_badge"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="4dp"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="5dp"
             android:text="Mic Muted | Screen Off"
             android:textColor="@color/text_secondary"
-            android:textSize="10sp"
+            android:textSize="11sp"
             android:textStyle="bold" />
 
-        <!-- Sleek Vector Gear Icon Button in Corner -->
         <ImageButton
             android:id="@+id/btnOpenSettings"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="@drawable/bg_btn_3d_red"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_btn_3d_dark"
             android:contentDescription="Open Settings"
-            android:padding="8dp"
+            android:padding="10dp"
             android:scaleType="centerInside"
             android:src="@drawable/ic_settings_gear" />
     </LinearLayout>
 
-    <!-- Compact 38dp Session Controls Row -->
+    <!-- 2. Futuristic AI Orb & Interactive Voice Status Panel -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:background="@drawable/bg_card"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:weightSum="4">
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp">
 
-        <Button
-            android:id="@+id/btnToggleAssistant"
-            style="@style/Widget.BengaliAgent.Button.Primary"
-            android:layout_width="0dp"
-            android:layout_height="38dp"
-            android:layout_marginEnd="5dp"
-            android:layout_weight="1"
-            android:paddingHorizontal="4dp"
-            android:text="Start"
-            android:textSize="11sp" />
+        <!-- Animated Concentric AI Orb (Tap to Toggle Voice) -->
+        <FrameLayout
+            android:id="@+id/flAiOrbContainer"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:clickable="true"
+            android:contentDescription="Tap AI Orb to toggle voice assistant"
+            android:focusable="true">
 
-        <Button
-            android:id="@+id/btnPauseResume"
-            style="@style/Widget.BengaliAgent.Button.Secondary"
-            android:layout_width="0dp"
-            android:layout_height="38dp"
-            android:layout_marginEnd="5dp"
-            android:layout_weight="1"
-            android:paddingHorizontal="4dp"
-            android:text="Pause"
-            android:textSize="11sp" />
+            <View
+                android:id="@+id/viewOrbOuterGlow"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_ai_orb_outer" />
 
-        <Button
-            android:id="@+id/btnStopTask"
-            style="@style/Widget.BengaliAgent.Button.Destructive"
-            android:layout_width="0dp"
-            android:layout_height="38dp"
-            android:layout_marginEnd="5dp"
-            android:layout_weight="1"
-            android:paddingHorizontal="4dp"
-            android:text="Stop"
-            android:textSize="11sp" />
+            <View
+                android:id="@+id/viewOrbCore"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_ai_orb_core" />
+        </FrameLayout>
 
-        <Button
-            android:id="@+id/btnScreenToggle"
-            style="@style/Widget.BengaliAgent.Button.Secondary"
+        <!-- Greeting & Session Controls -->
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="38dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:paddingHorizontal="4dp"
-            android:text="Screen: Off"
-            android:textSize="11sp" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvOrbSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tap the AI Orb or Mic to speak naturally in Bengali or English"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:weightSum="4">
+
+                <Button
+                    android:id="@+id/btnToggleAssistant"
+                    style="@style/Widget.BengaliAgent.Button.Primary"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:paddingHorizontal="2dp"
+                    android:text="Start"
+                    android:textSize="11sp" />
+
+                <Button
+                    android:id="@+id/btnPauseResume"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:paddingHorizontal="2dp"
+                    android:text="Pause"
+                    android:textSize="11sp" />
+
+                <Button
+                    android:id="@+id/btnStopTask"
+                    style="@style/Widget.BengaliAgent.Button.Destructive"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:paddingHorizontal="2dp"
+                    android:text="Stop"
+                    android:textSize="11sp" />
+
+                <Button
+                    android:id="@+id/btnScreenToggle"
+                    style="@style/Widget.BengaliAgent.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:paddingHorizontal="2dp"
+                    android:text="Screen: Off"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 
-    <!-- Conversation Transcript Container -->
+    <!-- 3. Quick Action Shortcuts Row -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnQuickWhatsApp"
+                style="@style/Widget.BengaliAgent.Button.Pill"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:text="Open WhatsApp" />
+
+            <Button
+                android:id="@+id/btnQuickYouTube"
+                style="@style/Widget.BengaliAgent.Button.Pill"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:text="Open YouTube" />
+
+            <Button
+                android:id="@+id/btnQuickChrome"
+                style="@style/Widget.BengaliAgent.Button.Pill"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:text="Open Chrome" />
+
+            <Button
+                android:id="@+id/btnQuickSettings"
+                style="@style/Widget.BengaliAgent.Button.Pill"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:text="System Settings" />
+
+            <Button
+                android:id="@+id/btnQuickWhatOnScreen"
+                style="@style/Widget.BengaliAgent.Button.Pill"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="What is on my screen?" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- 4. Conversation Transcript Container -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvTranscript"
         android:layout_width="match_parent"
@@ -131,7 +235,7 @@
         android:contentDescription="Conversation transcript"
         android:padding="10dp" />
 
-    <!-- Bottom Message Composer with Vector Mic Toggle Icon (No Emoji) -->
+    <!-- 5. Refined Message Composer (Vector Icons Only, Zero Emojis) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -144,12 +248,12 @@
             android:id="@+id/btnMicToggle"
             style="@style/Widget.BengaliAgent.Button.Secondary"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
+            android:layout_height="42dp"
             android:layout_marginEnd="6dp"
             android:contentDescription="Toggle microphone mute or unmute"
             android:drawableStart="@drawable/ic_mic_off"
             android:drawablePadding="6dp"
-            android:minWidth="78dp"
+            android:minWidth="84dp"
             android:paddingHorizontal="10dp"
             android:singleLine="true"
             android:text="Muted"
@@ -161,24 +265,27 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:hint="Ask in English or Bengali..."
+            android:hint="Ask in Bengali or English..."
             android:inputType="textMultiLine"
             android:maxLines="4"
-            android:minHeight="40dp"
+            android:minHeight="42dp"
             android:paddingHorizontal="8dp"
             android:paddingVertical="6dp"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_muted"
-            android:textSize="13sp" />
+            android:textSize="14sp" />
 
         <Button
             android:id="@+id/btnSend"
             style="@style/Widget.BengaliAgent.Button.Primary"
-            android:layout_width="68dp"
-            android:layout_height="40dp"
+            android:layout_width="wrap_content"
+            android:layout_height="42dp"
             android:layout_marginStart="6dp"
             android:contentDescription="Send message"
-            android:paddingHorizontal="8dp"
+            android:drawableEnd="@drawable/ic_send_vector"
+            android:drawablePadding="6dp"
+            android:minWidth="76dp"
+            android:paddingHorizontal="12dp"
             android:singleLine="true"
             android:text="Send"
             android:textSize="12sp" />

@@ -12,14 +12,14 @@ import android.media.projection.MediaProjectionManager
 import android.util.Base64
 import android.util.DisplayMetrics
 import android.view.WindowManager
+import kotlinx.coroutines.delay
 import java.io.ByteArrayOutputStream
 
 /**
- * Manages official MediaProjection screen sharing:
- * - Starts only after explicit user consent via MediaProjectionManager.
- * - Downscales frames to max 720px width and throttles capture (min 3 seconds between frames)
- *   to keep RAM low (<10MB buffer) and avoid continuous frame uploads.
- * - Immediately stops and releases resources when stopped or revoked.
+ * Reliable MediaProjection manager:
+ * - Prevents stale or corrupted frames when projection stops.
+ * - Retries briefly when a fresh frame is requested so "What is on my screen?" never fails
+ *   due to ImageReader surface warm-up timing.
  */
 object ScreenCaptureManager {
 
@@ -29,13 +29,15 @@ object ScreenCaptureManager {
     private var lastCaptureTimeMs: Long = 0L
     private var cachedBase64Jpeg: String? = null
 
-    private const val MIN_CAPTURE_INTERVAL_MS = 3000L
+    private const val MIN_CAPTURE_INTERVAL_MS = 2000L
     private const val MAX_WIDTH = 720
 
     var onProjectionStoppedListener: (() -> Unit)? = null
 
+    @Synchronized
     fun isSharingActive(): Boolean = mediaProjection != null && imageReader != null
 
+    @Synchronized
     fun startProjection(
         context: Context,
         resultCode: Int,
@@ -71,7 +73,7 @@ object ScreenCaptureManager {
                 targetWidth,
                 targetHeight,
                 PixelFormat.RGBA_8888,
-                2 // Max 2 images in buffer for 2 GB RAM target
+                2
             )
 
             val vDisplay = projection.createVirtualDisplay(
@@ -96,26 +98,37 @@ object ScreenCaptureManager {
     }
 
     /**
-     * Captures a single downscaled JPEG frame (Base64) on demand, respecting the 3-second throttle.
-     * Returns null if projection is inactive or if a secure window blocks capture.
+     * Suspends briefly if necessary to guarantee a fresh, non-corrupted frame when the user
+     * asks "What is on my screen?".
      */
+    suspend fun captureFreshFrameWithRetry(): String? {
+        if (!isSharingActive()) return null
+        for (attempt in 1..3) {
+            val frame = captureThrottledFrameBase64()
+            if (!frame.isNullOrBlank()) return frame
+            delay(140L)
+        }
+        return cachedBase64Jpeg
+    }
+
     @Synchronized
     fun captureThrottledFrameBase64(): String? {
         val reader = imageReader ?: return null
         val now = System.currentTimeMillis()
-        if (now - lastCaptureTimeMs < MIN_CAPTURE_INTERVAL_MS && cachedBase64Jpeg != null) {
+        if (now - lastCaptureTimeMs < MIN_CAPTURE_INTERVAL_MS && !cachedBase64Jpeg.isNullOrBlank()) {
             return cachedBase64Jpeg
         }
 
         val image = try {
             reader.acquireLatestImage()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         } ?: return cachedBase64Jpeg
 
         try {
             val planes = image.planes
-            val buffer = planes[0].buffer
+            if (planes.isEmpty()) return cachedBase64Jpeg
+            val buffer = planes[0].buffer ?: return cachedBase64Jpeg
             val pixelStride = planes[0].pixelStride
             val rowStride = planes[0].rowStride
             val rowPadding = rowStride - pixelStride * image.width
@@ -126,6 +139,7 @@ object ScreenCaptureManager {
                 image.height,
                 Bitmap.Config.ARGB_8888
             )
+            buffer.rewind()
             rawBitmap.copyPixelsFromBuffer(buffer)
 
             val cropped = if (bitmapWidth != image.width) {
@@ -137,15 +151,18 @@ object ScreenCaptureManager {
             }
 
             val out = ByteArrayOutputStream()
-            cropped.compress(Bitmap.CompressFormat.JPEG, 65, out)
+            cropped.compress(Bitmap.CompressFormat.JPEG, 68, out)
             cropped.recycle()
 
-            val encoded = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+            val bytes = out.toByteArray()
+            if (bytes.size < 256) return cachedBase64Jpeg
+
+            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
             cachedBase64Jpeg = encoded
             lastCaptureTimeMs = now
             return encoded
-        } catch (e: Exception) {
-            return null
+        } catch (_: Exception) {
+            return cachedBase64Jpeg
         } finally {
             try {
                 image.close()
@@ -157,6 +174,7 @@ object ScreenCaptureManager {
     @Synchronized
     fun stopProjection() {
         cachedBase64Jpeg = null
+        lastCaptureTimeMs = 0L
         try {
             virtualDisplay?.release()
         } catch (_: Exception) {

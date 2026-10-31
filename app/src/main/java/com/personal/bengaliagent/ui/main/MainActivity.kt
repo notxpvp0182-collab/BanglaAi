@@ -1,6 +1,8 @@
 package com.personal.bengaliagent.ui.main
 
 import android.Manifest
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -9,6 +11,7 @@ import android.media.projection.MediaProjectionManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Bundle
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -20,6 +23,7 @@ import com.personal.bengaliagent.AgentApp
 import com.personal.bengaliagent.R
 import com.personal.bengaliagent.agent.ActionExecutor
 import com.personal.bengaliagent.agent.AgentPlanner
+import com.personal.bengaliagent.agent.AndroidActionManager
 import com.personal.bengaliagent.agent.PlannedAction
 import com.personal.bengaliagent.databinding.ActivityMainBinding
 import com.personal.bengaliagent.domain.model.AgentState
@@ -55,6 +59,7 @@ class MainActivity : AppCompatActivity() {
     private var isMicMuted: Boolean = true
     private var isScreenSharing: Boolean = false
     private var activeTaskJob: Job? = null
+    private var orbPulseAnimator: ObjectAnimator? = null
 
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -80,13 +85,13 @@ class MainActivity : AppCompatActivity() {
             isAssistantEnabled = true
             updateState(AgentState.SCREEN_SHARING)
             appendSystemMessage(
-                "Screen sharing active. Controls are in your notification panel. Open any coding or video editing app and tell me what to do.",
+                "Screen sharing is now active. Ask 'What is on my screen?' or open any external app for AI guidance.",
                 persist = false
             )
             refreshStatusUi()
         } else {
             isScreenSharing = false
-            appendSystemMessage("Screen sharing permission was declined.", persist = false)
+            appendSystemMessage("Screen sharing consent was declined.", persist = false)
             refreshStatusUi()
         }
     }
@@ -107,6 +112,8 @@ class MainActivity : AppCompatActivity() {
             context = this,
             scope = lifecycleScope,
             onTranscriptReady = { spokenText ->
+                updateState(AgentState.PROCESSING)
+                refreshStatusUi()
                 handleIncomingPrompt(spokenText)
             },
             onStatusUpdate = { statusEn ->
@@ -120,6 +127,19 @@ class MainActivity : AppCompatActivity() {
                     updateState(AgentState.READY)
                 }
                 refreshStatusUi()
+            },
+            onSpeakingStateChanged = { speaking ->
+                if (speaking) {
+                    updateState(AgentState.SPEAKING)
+                } else if (currentState == AgentState.SPEAKING) {
+                    updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
+                }
+                refreshStatusUi()
+            },
+            onAudioRmsChanged = { rmsNormalized ->
+                val scale = 1.0f + (rmsNormalized * 0.35f)
+                binding.viewOrbOuterGlow.scaleX = scale
+                binding.viewOrbOuterGlow.scaleY = scale
             }
         )
 
@@ -162,7 +182,7 @@ class MainActivity : AppCompatActivity() {
                 binding.rvTranscript.scrollToPosition(messages.size - 1)
             } else {
                 appendSystemMessage(
-                    "Welcome to Bengali AI Agent. Tap the top-right Settings icon to connect Gemini, Groq, or OpenRouter.",
+                    "Welcome to Bengali AI Agent. Tap the top-right Settings gear to connect Gemini, Groq, or OpenRouter, or tap the AI Orb to speak.",
                     persist = false
                 )
             }
@@ -206,9 +226,25 @@ class MainActivity : AppCompatActivity() {
         refreshStatusUi()
     }
 
+    override fun onPause() {
+        super.onPause()
+        orbPulseAnimator?.cancel()
+    }
+
     private fun setupControls() {
         binding.btnOpenSettings.setOnClickListener {
             startActivity(Intent(this, ProviderSettingsActivity::class.java))
+        }
+
+        // Interactive AI Orb toggles voice listening or interrupts active speech
+        binding.flAiOrbContainer.setOnClickListener {
+            if (voiceManager.isCurrentlySpeaking()) {
+                voiceManager.stopSpeaking()
+                updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
+                refreshStatusUi()
+            } else {
+                binding.btnMicToggle.performClick()
+            }
         }
 
         binding.btnToggleAssistant.setOnClickListener {
@@ -255,13 +291,11 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             if (!isMicMuted) {
-                // Click to Mute / Turn Off
                 voiceManager.stopListeningImmediately()
                 isMicMuted = true
                 updateState(AgentState.MUTED)
                 refreshStatusUi()
             } else {
-                // Click to Unmute / Keep Continuously On
                 val granted = ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.RECORD_AUDIO
@@ -287,6 +321,23 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Quick Action Shortcuts
+        binding.btnQuickWhatsApp.setOnClickListener {
+            handleIncomingPrompt("Open WhatsApp")
+        }
+        binding.btnQuickYouTube.setOnClickListener {
+            handleIncomingPrompt("Open YouTube")
+        }
+        binding.btnQuickChrome.setOnClickListener {
+            handleIncomingPrompt("Open Chrome")
+        }
+        binding.btnQuickSettings.setOnClickListener {
+            handleIncomingPrompt("Open Settings")
+        }
+        binding.btnQuickWhatOnScreen.setOnClickListener {
+            handleIncomingPrompt("What is on my screen?")
+        }
+
         binding.btnSend.setOnClickListener {
             val prompt = binding.etUserInput.text?.toString()?.trim().orEmpty()
             if (prompt.isEmpty()) return@setOnClickListener
@@ -297,6 +348,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun unmuteMicrophoneContinuous() {
         isMicMuted = false
+        if (!isAssistantEnabled) {
+            isAssistantEnabled = true
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, AgentForegroundService::class.java)
+            )
+        }
         voiceManager.setContinuousMode(true)
         voiceManager.startListening()
         refreshStatusUi()
@@ -314,6 +372,16 @@ class MainActivity : AppCompatActivity() {
         sendUserMessage(prompt)
     }
 
+    private fun isScreenInspectionQuestion(prompt: String): Boolean {
+        val lower = prompt.lowercase()
+        val triggers = listOf(
+            "what is on my screen", "what's on my screen", "read my screen",
+            "analyze my screen", "describe my screen",
+            "স্ক্রিনে কী", "আমার স্ক্রিনে", "স্ক্রিন দেখে বলো"
+        )
+        return triggers.any { lower.contains(it) }
+    }
+
     private fun sendUserMessage(prompt: String) {
         voiceManager.stopSpeaking()
         val userMsg = ChatMessage(
@@ -327,6 +395,50 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             memoryRepo.saveChatMessage(userMsg)
+        }
+
+        // 1. Deterministic Local App Action Execution (Works even offline!)
+        val directAction = AndroidActionManager.tryExecuteDirectCommand(this, prompt)
+        if (directAction.matchedIntentCommand) {
+            val reply = directAction.responseMessage
+            val assistantMsg = ChatMessage(
+                id = System.currentTimeMillis(),
+                role = ChatMessage.Role.ASSISTANT,
+                text = reply,
+                providerUsed = "Android System"
+            )
+            messages.add(assistantMsg)
+            transcriptAdapter.submitList(messages)
+            binding.rvTranscript.scrollToPosition(messages.size - 1)
+            lifecycleScope.launch {
+                memoryRepo.saveChatMessage(assistantMsg)
+                memoryRepo.recordTaskOutcome(
+                    goal = prompt,
+                    status = if (directAction.executedSuccess) "COMPLETED" else "FAILED",
+                    outcome = reply,
+                    steps = 1
+                )
+                if (prefs.isTtsAutoSpeakEnabled()) {
+                    voiceManager.speak(reply)
+                }
+            }
+            updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
+            refreshStatusUi()
+            return
+        }
+
+        // 2. Honest Screen Inspection Check before querying Cloud AI
+        val askingAboutScreen = isScreenInspectionQuestion(prompt)
+        val screenObs = AgentAccessibilityService.instance?.observeCurrentScreen()
+        if (askingAboutScreen && !ScreenCaptureManager.isSharingActive() && screenObs == null) {
+            val honestMsg =
+                "Screen sharing and Accessibility inspection are currently off. Tap 'Screen: Off' above and approve Android's screen capture prompt so I can see and analyze your screen."
+            appendSystemMessage(honestMsg, persist = false)
+            if (prefs.isTtsAutoSpeakEnabled()) {
+                voiceManager.speak(honestMsg)
+            }
+            refreshStatusUi()
+            return
         }
 
         if (!isNetworkAvailable()) {
@@ -344,12 +456,15 @@ class MainActivity : AppCompatActivity() {
             updateState(AgentState.THINKING)
             refreshStatusUi()
 
-            val isAutomation = AgentPlanner.isAutomationIntent(prompt)
-            val isResearch = !isAutomation && WebResearchClient.isResearchIntent(prompt)
+            val isAutomation = !askingAboutScreen && AgentPlanner.isAutomationIntent(prompt)
+            val isResearch = !isAutomation && !askingAboutScreen && WebResearchClient.isResearchIntent(prompt)
 
-            val screenObs = AgentAccessibilityService.instance?.observeCurrentScreen()
             val screenshotBase64 = if (isScreenSharing && ScreenCaptureManager.isSharingActive()) {
-                ScreenCaptureManager.captureThrottledFrameBase64()
+                if (askingAboutScreen) {
+                    ScreenCaptureManager.captureFreshFrameWithRetry()
+                } else {
+                    ScreenCaptureManager.captureThrottledFrameBase64()
+                }
             } else {
                 null
             }
@@ -382,7 +497,15 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            if (isAutomation || isScreenSharing) {
+            if (askingAboutScreen && screenObs != null) {
+                contextMessages.add(
+                    ChatMessage(
+                        id = 0L,
+                        role = ChatMessage.Role.SYSTEM,
+                        text = "The user is asking about their current screen. Here is the visible UI hierarchy:\n${screenObs.toCompactPromptString()}"
+                    )
+                )
+            } else if (isAutomation || isScreenSharing) {
                 val codingAllowed = prefs.isAiCodingCapabilityEnabled()
                 val videoAllowed = prefs.isAiVideoEditCapabilityEnabled()
                 contextMessages.add(
@@ -452,8 +575,9 @@ class MainActivity : AppCompatActivity() {
                     memoryRepo.saveChatMessage(assistantMsg)
                     if (prefs.isTtsAutoSpeakEnabled()) {
                         voiceManager.speak(summaryReport)
+                    } else {
+                        updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
                     }
-                    updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
                     transcriptAdapter.submitList(messages)
                     binding.rvTranscript.scrollToPosition(messages.size - 1)
                     refreshStatusUi()
@@ -481,10 +605,11 @@ class MainActivity : AppCompatActivity() {
             )
             messages.add(assistantMsg)
             memoryRepo.saveChatMessage(assistantMsg)
-            updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
 
             if (prefs.isTtsAutoSpeakEnabled()) {
                 voiceManager.speak(baseReply)
+            } else {
+                updateState(if (isMicMuted) AgentState.READY else AgentState.LISTENING)
             }
             transcriptAdapter.submitList(messages)
             binding.rvTranscript.scrollToPosition(messages.size - 1)
@@ -526,10 +651,67 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateState(newState: AgentState) {
         currentState = newState
+        updateOrbAnimationForState(newState)
+    }
+
+    private fun updateOrbAnimationForState(state: AgentState) {
+        orbPulseAnimator?.cancel()
+        val isAnimatedState = state == AgentState.LISTENING ||
+            state == AgentState.PROCESSING ||
+            state == AgentState.THINKING ||
+            state == AgentState.SPEAKING ||
+            state == AgentState.ACTING
+
+        if (!isAnimatedState) {
+            binding.viewOrbOuterGlow.scaleX = 1.0f
+            binding.viewOrbOuterGlow.scaleY = 1.0f
+            binding.viewOrbCore.scaleX = 1.0f
+            binding.viewOrbCore.scaleY = 1.0f
+            return
+        }
+
+        val targetScale = if (state == AgentState.SPEAKING) 1.22f else 1.15f
+        val duration = when (state) {
+            AgentState.PROCESSING, AgentState.THINKING -> 550L
+            AgentState.SPEAKING -> 450L
+            else -> 850L
+        }
+
+        orbPulseAnimator = ObjectAnimator.ofPropertyValuesHolder(
+            binding.viewOrbCore,
+            PropertyValuesHolder.ofFloat("scaleX", 1.0f, targetScale, 1.0f),
+            PropertyValuesHolder.ofFloat("scaleY", 1.0f, targetScale, 1.0f)
+        ).apply {
+            this.duration = duration
+            repeatCount = ObjectAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
+        }
     }
 
     private fun refreshStatusUi() {
         binding.tvAgentState.text = currentState.labelEn
+        val stateColorRes = when (currentState) {
+            AgentState.READY -> R.color.accent_green
+            AgentState.LISTENING, AgentState.SPEAKING -> R.color.accent_cyan
+            AgentState.PROCESSING, AgentState.THINKING, AgentState.ACTING -> R.color.accent_glow
+            AgentState.ERROR, AgentState.OFFLINE -> R.color.accent_red_bright
+            else -> R.color.text_secondary
+        }
+        binding.tvAgentState.setTextColor(ContextCompat.getColor(this, stateColorRes))
+
+        binding.tvOrbSubtitle.text = when (currentState) {
+            AgentState.LISTENING -> "Listening continuously... Speak in Bengali or English."
+            AgentState.PROCESSING -> "Processing your speech..."
+            AgentState.THINKING -> "Analyzing context and generating response..."
+            AgentState.SPEAKING -> "Speaking... Tap the AI Orb to interrupt."
+            AgentState.ACTING -> "Executing verified Android action..."
+            AgentState.SCREEN_SHARING -> "Screen sharing live. Ask 'What is on my screen?'"
+            AgentState.OFFLINE -> "Disconnected • Check your internet connection."
+            AgentState.ERROR -> "Connection or task error • Check AI Connection settings."
+            else -> "Tap the AI Orb or Mic to speak naturally in Bengali or English"
+        }
+
         binding.btnToggleAssistant.text =
             if (isAssistantEnabled) "Active" else "Start"
         binding.btnPauseResume.text =
@@ -537,7 +719,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnScreenToggle.text =
             if (isScreenSharing) "Screen: On" else "Screen: Off"
 
-        // Update Mic vector icon & background style (No Emojis)
         if (isMicMuted) {
             binding.btnMicToggle.text = "Muted"
             binding.btnMicToggle.setBackgroundResource(R.drawable.bg_btn_3d_dark)
@@ -579,6 +760,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        orbPulseAnimator?.cancel()
         voiceManager.releaseAll()
         super.onDestroy()
     }
