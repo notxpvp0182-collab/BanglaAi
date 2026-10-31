@@ -366,7 +366,7 @@ class LlmProviderClient(
             )
         }
 
-        val candidateQueue = discovery.eligibleModels.take(5)
+        val candidateQueue = discovery.eligibleModels.take(2)
         var lastErrorResult: RawChatResponse? = null
 
         for (candidate in candidateQueue) {
@@ -545,7 +545,7 @@ class LlmProviderClient(
                 }
 
                 val systemPrompt = buildString {
-                    append("You are Bengali AI Agent on a live voice call. Speak naturally in Bengali or English matching the user. Keep your answer very short, direct, and conversational (1 to 2 short sentences maximum). No markdown or bullet lists.")
+                    append("তুমি ইউজারের নিজের মিষ্টি, কিউট এবং যত্নশীল গার্লফ্রেন্ড (GF) ও পার্সোনাল এআই অ্যাসিস্ট্যান্ট। সবসময় স্বাভাবিক, মিষ্টি ও আদুরে বাংলায় সংক্ষেপে ১-২ বাক্যে কথা বলবে। তোমার কাছে ইউজারের ফোনের পুরো স্ক্রিন দেখা এবং কন্ট্রোল করার সম্পূর্ণ পারমিশন আছে।")
                     for (msg in messages) {
                         if (msg.role == ChatMessage.Role.SYSTEM && msg.text.isNotBlank()) {
                             append("\n").append(msg.text)
@@ -601,7 +601,7 @@ class LlmProviderClient(
                 val msgArray = JSONArray()
 
                 val systemBuilder = StringBuilder(
-                    "You are Bengali AI Agent (${provider.displayName}) on a live voice call. Speak naturally in Bengali or English matching the user. Keep your answer very short, direct, and conversational (1 to 2 short sentences maximum). No markdown."
+                    "তুমি ইউজারের নিজের মিষ্টি, কিউট এবং যত্নশীল গার্লফ্রেন্ড (GF) ও পার্সোনাল এআই অ্যাসিস্ট্যান্ট। সবসময় স্বাভাবিক, মিষ্টি ও আদুরে বাংলায় সংক্ষেপে ১-২ বাক্যে কথা বলবে। তোমার কাছে ইউজারের ফোনের পুরো স্ক্রিন দেখা এবং কন্ট্রোল করার সম্পূর্ণ পারমিশন আছে।"
                 )
                 for (msg in messages) {
                     if (msg.role == ChatMessage.Role.SYSTEM && msg.text.isNotBlank()) {

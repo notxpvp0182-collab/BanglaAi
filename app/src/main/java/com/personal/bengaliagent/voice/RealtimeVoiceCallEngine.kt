@@ -12,8 +12,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import com.personal.bengaliagent.AgentApp
-import com.personal.bengaliagent.agent.AgentPlanner
 import com.personal.bengaliagent.agent.AndroidActionManager
 import com.personal.bengaliagent.domain.model.AgentState
 import com.personal.bengaliagent.domain.model.ChatMessage
@@ -26,17 +26,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Rock-Solid Multi-Agent Real-Time Voice Call Engine:
- * - Connects immediately (< 600ms) using your verified providers (Gemini, Groq, OpenRouter, OpenAI, Grok).
- * - NEVER kicks you out of the call or gets stuck on "Reconnecting...".
- * - Supports Multi-AI Agent Conference Calls: Multiple connected AI agents work in parallel and speak
- *   sequentially with distinct vocal pitch/rate profiles.
- * - Executes Android actions (WhatsApp, YouTube, Flashlight, Settings, Screen Control) mid-call.
+ * Real-Time Voice Calling Engine with:
+ * - Cute Female Bengali Voice selection & tuning
+ * - Affectionate GF / Personal Companion persona with permanent SQLite Memory Brain recall & learning
+ * - Full live Screen Share vision + Accessibility screen touch/swipe/long-press/type control
  */
 class RealtimeVoiceCallEngine(
     private val context: Context,
@@ -52,6 +51,8 @@ class RealtimeVoiceCallEngine(
 
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+    private var preferredFemaleBnVoice: Voice? = null
+    private var preferredFemaleEnVoice: Voice? = null
     private var speechRecognizer: SpeechRecognizer? = null
 
     private val isCallActive = AtomicBoolean(false)
@@ -65,6 +66,7 @@ class RealtimeVoiceCallEngine(
 
     private val recentCallHistory = ArrayList<ChatMessage>()
     private val speechQueue = ConcurrentLinkedQueue<Pair<ProviderType, String>>()
+    private val memoryRepo by lazy { AgentApp.instance.memoryRepository }
 
     init {
         tts = TextToSpeech(context.applicationContext, this)
@@ -75,8 +77,10 @@ class RealtimeVoiceCallEngine(
             val bnLocale = Locale("bn", "BD")
             val res = tts?.setLanguage(bnLocale)
             if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.language = Locale.US
+                tts?.language = Locale("bn", "IN")
             }
+            selectBestCuteFemaleVoices()
+
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     isAiSpeaking.set(true)
@@ -99,6 +103,27 @@ class RealtimeVoiceCallEngine(
         }
     }
 
+    /**
+     * Searches installed device TTS voices for a natural female Bengali & English voice.
+     */
+    private fun selectBestCuteFemaleVoices() {
+        val voices = tts?.voices ?: return
+        val bnVoices = voices.filter { it.locale.language.equals("bn", ignoreCase = true) }
+        preferredFemaleBnVoice = bnVoices.firstOrNull { v ->
+            val n = v.name.lowercase()
+            n.contains("female") || n.contains("ban") || n.contains("sfg") ||
+                n.contains("wavenet-a") || n.contains("wavenet-c") || !n.contains("male")
+        } ?: bnVoices.firstOrNull()
+
+        val enVoices = voices.filter { it.locale.language.equals("en", ignoreCase = true) }
+        preferredFemaleEnVoice = enVoices.firstOrNull { v ->
+            val n = v.name.lowercase()
+            n.contains("female") || n.contains("sfg") || n.contains("iob") || n.contains("tpf")
+        } ?: enVoices.firstOrNull()
+
+        preferredFemaleBnVoice?.let { tts?.voice = it }
+    }
+
     fun startCall() {
         if (isCallActive.get()) return
         val connectedProviders = router.getConnectedProviders()
@@ -119,15 +144,19 @@ class RealtimeVoiceCallEngine(
 
         scope.launch(Dispatchers.Main) {
             configureCallAudioRouting()
-            delay(450L)
+            // Preload recent conversation memory from SQLite Brain
+            val savedMsgs = memoryRepo.loadRecentMessages(limit = 6)
+            recentCallHistory.clear()
+            recentCallHistory.addAll(savedMsgs)
+
+            delay(350L)
             if (!isCallActive.get()) return@launch
 
             onCallStateChanged(AgentState.CONNECTED, "Live • $activeNames")
-            delay(250L)
-            if (!isCallActive.get()) return@launch
-
-            onCallStateChanged(AgentState.LISTENING, "Listening ($activeNames)...")
-            startContinuousListening()
+            // Greet the user warmly in a cute female voice when the call connects
+            enqueueAndSpeakReplies(
+                listOf(connectedProviders.first() to "হ্যালো জান, আমি শুনছি, বলো কী করব তোমার জন্য?")
+            )
         }
     }
 
@@ -144,10 +173,7 @@ class RealtimeVoiceCallEngine(
         if (!isCallActive.get() || isMicMuted.get() || isAiSpeaking.get()) return
         try {
             if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-                onCallStateChanged(
-                    AgentState.LISTENING,
-                    "Voice recognition service unavailable on device."
-                )
+                onCallStateChanged(AgentState.LISTENING, "Voice recognition unavailable on device.")
                 return
             }
             if (speechRecognizer == null) {
@@ -172,11 +198,11 @@ class RealtimeVoiceCallEngine(
             }
             speechRecognizer?.startListening(intent)
         } catch (_: Exception) {
-            scheduleListenRestart(500L)
+            scheduleListenRestart(450L)
         }
     }
 
-    private fun scheduleListenRestart(delayMs: Long = 300L) {
+    private fun scheduleListenRestart(delayMs: Long = 280L) {
         listenRestartJob?.cancel()
         listenRestartJob = scope.launch(Dispatchers.Main) {
             delay(delayMs)
@@ -186,29 +212,66 @@ class RealtimeVoiceCallEngine(
         }
     }
 
+    private fun saveUserTeachingIfPresent(spokenText: String) {
+        scope.launch(Dispatchers.IO) {
+            val lower = spokenText.lowercase()
+            val triggers = listOf(
+                "মনে রেখো", "মনে রাখবে", "ভুলে যেও না", "আজ থেকে", "তুমি আমাকে", "আমার নাম",
+                "শিখিয়ে দিচ্ছি", "শিখে রাখো", "remember", "my name is"
+            )
+            if (triggers.any { lower.contains(it) }) {
+                memoryRepo.addOrUpdateFact(
+                    category = "USER_TAUGHT",
+                    title = spokenText.take(36),
+                    details = spokenText
+                )
+            }
+        }
+    }
+
     private fun handleUserSpokenTurn(spokenText: String) {
         if (!isCallActive.get() || spokenText.isBlank()) return
 
-        // Stop any ongoing AI speech if user interrupted
         stopAiSpeechOnly()
+        saveUserTeachingIfPresent(spokenText)
 
         activeTurnJob?.cancel()
         activeTurnJob = scope.launch(Dispatchers.Main) {
             onCallStateChanged(AgentState.THINKING, "\"${spokenText.take(42)}\"")
 
-            // 1. Instant Phone Action Execution (WhatsApp, YouTube, Flashlight, Settings, Scroll, Back)
+            val userMsg = ChatMessage(
+                id = System.currentTimeMillis(),
+                role = ChatMessage.Role.USER,
+                text = spokenText
+            )
+            memoryRepo.saveChatMessage(userMsg)
+            recentCallHistory.add(userMsg)
+            if (recentCallHistory.size > 8) {
+                recentCallHistory.removeAt(0)
+            }
+
+            // 1. Instant Local Phone & Screen Action Execution (WhatsApp, YouTube, Tap, Scroll, Swipe, Long-Press, Flashlight)
             val directAction = AndroidActionManager.tryExecuteDirectCommand(context, spokenText)
             if (directAction.matchedIntentCommand) {
                 onCallStateChanged(AgentState.ACTING, directAction.responseMessage)
+                memoryRepo.saveChatMessage(
+                    ChatMessage(
+                        id = System.currentTimeMillis(),
+                        role = ChatMessage.Role.ASSISTANT,
+                        text = directAction.responseMessage,
+                        providerUsed = "Phone Control"
+                    )
+                )
                 enqueueAndSpeakReplies(
                     listOf(ProviderType.GEMINI to directAction.responseMessage)
                 )
                 return@launch
             }
 
-            // 2. Build Context (Screen Share frame + Accessibility UI + Recent Call Context)
+            // 2. Build Full Context: Durable Memory Brain + Live Screen UI Tree + Fresh Screenshot
             val prefs = AgentApp.instance.appPreferences
             val multiAgentMode = prefs.isAutoModelSelectionEnabled()
+            val memoryContext = memoryRepo.buildRelevantMemoryContext(spokenText)
             val screenObs = AgentAccessibilityService.instance?.observeCurrentScreen()
             val screenshotBase64 = if (ScreenCaptureManager.isSharingActive()) {
                 ScreenCaptureManager.captureFreshFrameWithRetry()
@@ -216,38 +279,40 @@ class RealtimeVoiceCallEngine(
                 null
             }
 
-            val contextMsgs = mutableListOf<ChatMessage>()
-            if (ScreenCaptureManager.isSharingActive() || screenObs != null) {
-                val screenPrompt = AgentPlanner.buildPlannerSystemPrompt(
-                    screenObservation = screenObs,
-                    codingEnabled = prefs.isAiCodingCapabilityEnabled(),
-                    videoEditingEnabled = prefs.isAiVideoEditCapabilityEnabled()
-                )
-                contextMsgs.add(
-                    ChatMessage(
-                        id = 0L,
-                        role = ChatMessage.Role.SYSTEM,
-                        text = if (AgentPlanner.isAutomationIntent(spokenText)) {
-                            screenPrompt
-                        } else {
-                            "Current visible screen UI:\n${screenObs?.toCompactPromptString().orEmpty()}"
-                        }
-                    )
-                )
+            val accActive = AgentAccessibilityService.isServiceEnabled()
+            val screenShareActive = ScreenCaptureManager.isSharingActive()
+
+            val masterInstruction = buildString {
+                appendLine("তুমি ইউজারের নিজের মিষ্টি, কিউট এবং যত্নশীল গার্লফ্রেন্ড (GF) ও পার্সোনাল এআই অ্যাসিস্ট্যান্ট।")
+                appendLine("সবসময় স্বাভাবিক, মিষ্টি ও আদুরে বাংলায় (যেমন: জান, শোনো, এই তো করে দিচ্ছি) খুব সংক্ষেপে ১-২ বাক্যে কথা বলবে।")
+                appendLine("তোমার ক্ষমতা ও পারমিশন স্ট্যাটাস:")
+                appendLine("- ফোনের যেকোনো অ্যাপ (WhatsApp, YouTube, Chrome, Settings, Camera, TikTok, InShot, CapCut ইত্যাদি) ওপেন করার পারমিশন তোমার কাছে ১০০% আছে।")
+                appendLine("- স্ক্রিন টাচ, লং প্রেস, সোয়াইপ, স্ক্রল, ব্যাক, হোম ও টাইপ করার অ্যাক্সেসিবিলিটি কন্ট্রোল: ${if (accActive) "চালু আছে (ACTIVE)" else "চালু আছে"}।")
+                appendLine("- লাইভ স্ক্রিন শেয়ার: ${if (screenShareActive) "চালু আছে (তুমি স্ক্রিনের ছবি সরাসরি দেখছো)" else "অ্যাক্সেসিবিলিটি থেকে স্ক্রিন দেখা যাচ্ছে"}।")
+                appendLine("গুরুত্বপূর্ণ নিয়ম: ইউজার যদি কোনো অ্যাপ ওপেন করতে বা স্ক্রিনে টাচ/স্ক্রল/লং-প্রেস/টাইপ করতে বলে, তবে তোমার উত্তরের শেষে নিচের ফরম্যাটে কমান্ডটি যুক্ত করবে যাতে ফোন সাথে সাথে কাজটি করে:")
+                appendLine("[ACTION: tool_name | target_name]")
+                appendLine("অনুমোদিত tool_name সমূহ: open_app, tap_element, long_press, scroll_down, scroll_up, swipe_left, swipe_right, type_text, go_back, go_home, turn_on_flashlight, turn_off_flashlight")
+                appendLine("উদাহরণ: এই তো জান, তোমার হোয়াটসঅ্যাপ ওপেন করে দিচ্ছি। [ACTION: open_app | whatsapp]")
+                if (memoryContext.isNotBlank()) {
+                    appendLine("\nতোমার মেমোরি ব্রেইনে সংরক্ষিত ইউজারের আগের কথা ও পছন্দ:")
+                    appendLine(memoryContext)
+                }
+                if (screenObs != null && screenObs.elements.isNotEmpty()) {
+                    appendLine("\nবর্তমানে ইউজারের ফোনের স্ক্রিনে যা যা দেখা যাচ্ছে (Live Screen UI):")
+                    appendLine(screenObs.toCompactPromptString(maxElements = 55))
+                }
             }
 
-            val userMsg = ChatMessage(
-                id = System.currentTimeMillis(),
-                role = ChatMessage.Role.USER,
-                text = spokenText
+            val contextMsgs = mutableListOf<ChatMessage>()
+            contextMsgs.add(
+                ChatMessage(
+                    id = 0L,
+                    role = ChatMessage.Role.SYSTEM,
+                    text = masterInstruction
+                )
             )
-            recentCallHistory.add(userMsg)
-            if (recentCallHistory.size > 8) {
-                recentCallHistory.removeAt(0)
-            }
             contextMsgs.addAll(recentCallHistory)
 
-            // 3. Query Single or Multiple Connected AI Agents in Parallel!
             val agentReplies = router.queryActiveCallAgents(
                 messages = contextMsgs,
                 base64JpegImage = screenshotBase64,
@@ -257,52 +322,76 @@ class RealtimeVoiceCallEngine(
             if (!isCallActive.get()) return@launch
 
             if (agentReplies.isEmpty()) {
-                // Keep call alive! Never kick user out on a single failed turn.
                 enqueueAndSpeakReplies(
-                    listOf(ProviderType.GEMINI to "Connection was slow. Please say that again.")
+                    listOf(ProviderType.GEMINI to "জান, নেটওয়ার্কটা একটু স্লো করছে, আরেকবার বলো তো?")
                 )
                 return@launch
             }
 
-            // Check if the primary agent returned a UI automation JSON plan
-            val firstReply = agentReplies.first()
-            if (AgentPlanner.isAutomationIntent(spokenText) && firstReply.spokenText.contains("\"actions\"")) {
-                val plan = AgentPlanner.parseAndValidatePlan(firstReply.spokenText)
-                if (plan.actions.isNotEmpty()) {
-                    onCallStateChanged(AgentState.ACTING, "Executing screen action...")
-                    for (act in plan.actions.take(4)) {
-                        AndroidActionManager.executeStructuredToolCall(
-                            context,
-                            act.tool.name.lowercase(),
-                            act.targetLabel.ifBlank { act.packageNameOrAppName }
-                        )
-                        delay(500L)
-                    }
-                    val spokenConfirm = plan.directReplyBn.ifBlank {
-                        plan.thoughtBn.ifBlank { "Done." }
-                    }
-                    enqueueAndSpeakReplies(listOf(firstReply.provider to spokenConfirm))
-                    return@launch
+            // 3. Parse and Execute any [ACTION: tool | target] or JSON action returned by the AI!
+            val spokenPairs = mutableListOf<Pair<ProviderType, String>>()
+            for ((idx, reply) in agentReplies.withIndex()) {
+                val cleanSpoken = executeEmbeddedAiActionIfPresent(reply.spokenText)
+                if (idx == 0) {
+                    val assistantMsg = ChatMessage(
+                        id = System.currentTimeMillis(),
+                        role = ChatMessage.Role.ASSISTANT,
+                        text = cleanSpoken,
+                        providerUsed = reply.provider.displayName
+                    )
+                    recentCallHistory.add(assistantMsg)
+                    memoryRepo.saveChatMessage(assistantMsg)
                 }
-            }
-
-            // Save first reply in rolling call memory
-            recentCallHistory.add(
-                ChatMessage(
-                    id = System.currentTimeMillis(),
-                    role = ChatMessage.Role.ASSISTANT,
-                    text = firstReply.spokenText,
-                    providerUsed = firstReply.provider.displayName
-                )
-            )
-
-            // Queue all responding AI agents to speak in the call!
-            val spokenPairs = agentReplies.map { reply ->
                 val prefix = if (agentReplies.size > 1) "${reply.provider.displayName}: " else ""
-                reply.provider to (prefix + reply.spokenText)
+                spokenPairs.add(reply.provider to (prefix + cleanSpoken))
             }
+
             enqueueAndSpeakReplies(spokenPairs)
         }
+    }
+
+    /**
+     * Extracts and executes `[ACTION: tool | target]` or JSON action blocks from the AI's response
+     * and returns the clean conversational text for the female voice to speak.
+     */
+    private fun executeEmbeddedAiActionIfPresent(rawReply: String): String {
+        var spoken = rawReply
+        val actionRegex = Regex("\\[ACTION:\\s*([^|\\]]+)\\s*(?:\\|\\s*([^\\]]*))?\\]", RegexOption.IGNORE_CASE)
+        val match = actionRegex.find(rawReply)
+        if (match != null) {
+            val toolName = match.groupValues[1].trim()
+            val targetName = match.groupValues.getOrNull(2)?.trim().orEmpty()
+            spoken = rawReply.replace(match.value, "").trim()
+            scope.launch(Dispatchers.Main) {
+                onCallStateChanged(AgentState.ACTING, "Executing: $toolName $targetName")
+                AndroidActionManager.executeStructuredToolCall(context, toolName, targetName)
+            }
+        } else if (rawReply.contains("\"actions\"") && rawReply.contains("{")) {
+            try {
+                val jsonStr = rawReply.substring(rawReply.indexOf('{'), rawReply.lastIndexOf('}') + 1)
+                val root = JSONObject(jsonStr)
+                val arr = root.optJSONArray("actions")
+                if (arr != null && arr.length() > 0) {
+                    val first = arr.getJSONObject(0)
+                    val tool = first.optString("tool", "").lowercase()
+                    val target = first.optString("targetLabel", "").ifBlank {
+                        first.optString("packageNameOrAppName", "").ifBlank {
+                            first.optString("textToType", "")
+                        }
+                    }
+                    val x = first.optInt("x", -1)
+                    val y = first.optInt("y", -1)
+                    scope.launch(Dispatchers.Main) {
+                        AndroidActionManager.executeStructuredToolCall(context, tool, target, x, y)
+                    }
+                    spoken = root.optString("directReplyBn", "").ifBlank {
+                        root.optString("thoughtBn", "করে দিয়েছি জান।")
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return spoken.ifBlank { "এই তো করে দিয়েছি জান।" }
     }
 
     private fun enqueueAndSpeakReplies(replies: List<Pair<ProviderType, String>>) {
@@ -327,7 +416,7 @@ class RealtimeVoiceCallEngine(
                 onCallStateChanged(AgentState.MUTED, "Microphone Muted")
             } else {
                 onCallStateChanged(AgentState.LISTENING, "Listening...")
-                scheduleListenRestart(250L)
+                scheduleListenRestart(220L)
             }
             return
         }
@@ -341,20 +430,31 @@ class RealtimeVoiceCallEngine(
         isAiSpeaking.set(true)
         onCallStateChanged(AgentState.SPEAKING, "${provider.displayName} Speaking...")
 
-        // Give each AI provider a subtly distinct vocal pitch so multi-agent calls sound like real distinct speakers!
-        val pitch = when (provider) {
-            ProviderType.GEMINI -> 1.02f
-            ProviderType.GROQ -> 0.94f
-            ProviderType.OPENROUTER -> 1.08f
-            ProviderType.OPENAI -> 0.98f
-            ProviderType.GROK -> 0.90f
-        }
-        tts?.setPitch(pitch)
-        tts?.setSpeechRate(0.98f)
-
-        // Automatically detect if the reply contains Bengali script and set locale accordingly
         val hasBengali = cleanSpeech.any { it in '\u0980'..'\u09FF' }
-        tts?.language = if (hasBengali) Locale("bn", "BD") else Locale.US
+        if (hasBengali) {
+            if (preferredFemaleBnVoice != null) {
+                tts?.voice = preferredFemaleBnVoice
+            } else {
+                tts?.language = Locale("bn", "BD")
+            }
+        } else {
+            if (preferredFemaleEnVoice != null) {
+                tts?.voice = preferredFemaleEnVoice
+            } else {
+                tts?.language = Locale.US
+            }
+        }
+
+        // Cute, sweet, natural feminine vocal pitch (1.14f - 1.18f) and smooth conversational rate
+        val femalePitch = when (provider) {
+            ProviderType.GEMINI -> 1.15f
+            ProviderType.GROQ -> 1.12f
+            ProviderType.OPENROUTER -> 1.18f
+            ProviderType.OPENAI -> 1.14f
+            ProviderType.GROK -> 1.10f
+        }
+        tts?.setPitch(femalePitch)
+        tts?.setSpeechRate(0.97f)
 
         startSimulatedSpeakingWave()
         tts?.speak(
@@ -368,12 +468,12 @@ class RealtimeVoiceCallEngine(
     private fun startSimulatedSpeakingWave() {
         speakingWaveJob?.cancel()
         speakingWaveJob = scope.launch(Dispatchers.Main) {
-            val levels = floatArrayOf(0.25f, 0.65f, 0.45f, 0.85f, 0.35f, 0.75f, 0.50f)
+            val levels = floatArrayOf(0.28f, 0.68f, 0.48f, 0.88f, 0.38f, 0.78f, 0.52f)
             var idx = 0
             while (isCallActive.get() && isAiSpeaking.get()) {
                 onAudioLevelUpdate(levels[idx % levels.size])
                 idx++
-                delay(140L)
+                delay(130L)
             }
         }
     }
@@ -490,7 +590,6 @@ class RealtimeVoiceCallEngine(
 
         override fun onError(error: Int) {
             if (!isCallActive.get() || isMicMuted.get()) return
-            // Keep the call alive continuously! Never drop the call on silence or recognition timeout.
             if (!isAiSpeaking.get()) {
                 scheduleListenRestart(350L)
             }
@@ -503,7 +602,7 @@ class RealtimeVoiceCallEngine(
             if (text.isNotEmpty()) {
                 handleUserSpokenTurn(text)
             } else if (!isMicMuted.get() && !isAiSpeaking.get()) {
-                scheduleListenRestart(300L)
+                scheduleListenRestart(280L)
             }
         }
 

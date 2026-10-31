@@ -29,7 +29,7 @@ object ScreenCaptureManager {
     private var lastCaptureTimeMs: Long = 0L
     private var cachedBase64Jpeg: String? = null
 
-    private const val MIN_CAPTURE_INTERVAL_MS = 2000L
+    private const val MIN_CAPTURE_INTERVAL_MS = 400L
     private const val MAX_WIDTH = 720
 
     var onProjectionStoppedListener: (() -> Unit)? = null

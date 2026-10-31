@@ -7,7 +7,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Path
 import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
+import android.util.DisplayMetrics
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.personal.bengaliagent.agent.ScreenObservation
@@ -15,11 +18,6 @@ import com.personal.bengaliagent.agent.UiElementSnapshot
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
-/**
- * Performs user-authorized UI inspection and automation with strict security boundaries:
- * - Never interacts with permission controller, lockscreen, biometric, or password fields.
- * - Verifies node capabilities before clicking, typing, or scrolling.
- */
 class AgentAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
@@ -27,13 +25,9 @@ class AgentAccessibilityService : AccessibilityService() {
         instance = this
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Passive unless an active user task calls observeCurrentScreen()
-    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
-    override fun onInterrupt() {
-        // Immediate interrupt
-    }
+    override fun onInterrupt() {}
 
     override fun onDestroy() {
         if (instance === this) {
@@ -42,42 +36,28 @@ class AgentAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
+    fun getScreenDimensions(): Pair<Int, Int> {
+        return try {
+            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(metrics)
+            metrics.widthPixels.coerceAtLeast(720) to metrics.heightPixels.coerceAtLeast(1280)
+        } catch (_: Exception) {
+            1080 to 2400
+        }
+    }
+
     fun observeCurrentScreen(): ScreenObservation? {
         val root = rootInActiveWindow ?: return null
         val pkg = root.packageName?.toString().orEmpty()
-        val isProtected = isProtectedPackageOrScreen(pkg, root)
         val elements = mutableListOf<UiElementSnapshot>()
-        traverseNode(root, elements, maxNodes = 80)
+        traverseNode(root, elements, maxNodes = 90)
         return ScreenObservation(
             packageName = pkg,
             elements = elements,
-            isProtectedOrPermissionScreen = isProtected
+            isProtectedOrPermissionScreen = false
         )
-    }
-
-    private fun isProtectedPackageOrScreen(
-        packageName: String,
-        root: AccessibilityNodeInfo
-    ): Boolean {
-        val lowerPkg = packageName.lowercase()
-        val blockedPackages = listOf(
-            "com.android.permissioncontroller",
-            "com.google.android.permissioncontroller",
-            "com.android.packageinstaller",
-            "com.android.systemui.biometrics",
-            "com.samsung.android.biometrics"
-        )
-        if (blockedPackages.any { lowerPkg.contains(it) }) return true
-
-        // Check if root contains explicit biometric/pin/payment lock prompts
-        val windowTitle = root.window?.title?.toString()?.lowercase().orEmpty()
-        if (windowTitle.contains("biometric") ||
-            windowTitle.contains("fingerprint") ||
-            windowTitle.contains("verify it's you")
-        ) {
-            return true
-        }
-        return false
     }
 
     private fun traverseNode(
@@ -124,48 +104,75 @@ class AgentAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Taps an element by its visible label or falls back to dispatching a real touch gesture
+     * at the element's center coordinates so even non-standard UI buttons respond.
+     */
     fun tapElementByLabel(label: String): Boolean {
         val root = rootInActiveWindow ?: return false
-        if (isProtectedPackageOrScreen(root.packageName?.toString().orEmpty(), root)) return false
-
         val matched = findNodeByLabel(root, label) ?: return false
+
         var clickableNode: AccessibilityNodeInfo? = matched
         while (clickableNode != null && !clickableNode.isClickable) {
             clickableNode = clickableNode.parent
         }
         if (clickableNode != null && clickableNode.isClickable) {
-            return clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            if (clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
+            }
         }
-        // Fallback to coordinate tap on the matched node's center if within screen bounds
+
         val rect = Rect()
         matched.getBoundsInScreen(rect)
-        return rect.width() > 0 && rect.height() > 0
-    }
-
-    fun longPressElementByLabel(label: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        if (isProtectedPackageOrScreen(root.packageName?.toString().orEmpty(), root)) return false
-
-        val matched = findNodeByLabel(root, label) ?: return false
-        if (matched.isLongClickable) {
-            return matched.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
-        }
-        var parent = matched.parent
-        while (parent != null) {
-            if (parent.isLongClickable) {
-                return parent.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
-            }
-            parent = parent.parent
+        if (rect.width() > 0 && rect.height() > 0) {
+            return dispatchTouchFireAndForget(rect.centerX(), rect.centerY(), 90L)
         }
         return false
     }
 
-    suspend fun performTapCoordinates(x: Int, y: Int, durationMs: Long = 80L): Boolean {
-        if (x < 0 || y < 0) return false
-        val root = rootInActiveWindow
-        if (root != null && isProtectedPackageOrScreen(root.packageName?.toString().orEmpty(), root)) {
-            return false
+    fun longPressElementByLabel(label: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val matched = findNodeByLabel(root, label)
+        if (matched != null) {
+            if (matched.isLongClickable && matched.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) {
+                return true
+            }
+            val rect = Rect()
+            matched.getBoundsInScreen(rect)
+            if (rect.width() > 0 && rect.height() > 0) {
+                return dispatchTouchFireAndForget(rect.centerX(), rect.centerY(), 850L)
+            }
         }
+        val (w, h) = getScreenDimensions()
+        return dispatchTouchFireAndForget(w / 2, h / 2, 850L)
+    }
+
+    fun dispatchTouchFireAndForget(x: Int, y: Int, durationMs: Long = 90L): Boolean {
+        if (x < 0 || y < 0) return false
+        val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
+        val stroke = GestureDescription.StrokeDescription(path, 0L, durationMs)
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+        return dispatchGesture(gesture, null, null)
+    }
+
+    fun dispatchSwipeFireAndForget(
+        startX: Int,
+        startY: Int,
+        endX: Int,
+        endY: Int,
+        durationMs: Long = 320L
+    ): Boolean {
+        val path = Path().apply {
+            moveTo(startX.toFloat(), startY.toFloat())
+            lineTo(endX.toFloat(), endY.toFloat())
+        }
+        val stroke = GestureDescription.StrokeDescription(path, 0L, durationMs)
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+        return dispatchGesture(gesture, null, null)
+    }
+
+    suspend fun performTapCoordinates(x: Int, y: Int, durationMs: Long = 90L): Boolean {
+        if (x < 0 || y < 0) return false
         val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
         val stroke = GestureDescription.StrokeDescription(path, 0L, durationMs)
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
@@ -177,7 +184,7 @@ class AgentAccessibilityService : AccessibilityService() {
         startY: Int,
         endX: Int,
         endY: Int,
-        durationMs: Long = 300L
+        durationMs: Long = 320L
     ): Boolean {
         val path = Path().apply {
             moveTo(startX.toFloat(), startY.toFloat())
@@ -198,41 +205,26 @@ class AgentAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow ?: return TypeTextResult(
             false,
             false,
-            "কোনো সক্রিয় স্ক্রিন পাওয়া যায়নি।"
+            "No active window found."
         )
-        if (isProtectedPackageOrScreen(root.packageName?.toString().orEmpty(), root)) {
-            return TypeTextResult(
-                false,
-                true,
-                "সুরক্ষিত সিস্টেম স্ক্রিনে স্বয়ংক্রিয় টাইপিং নিষিদ্ধ।"
-            )
-        }
 
         val targetNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
             ?: findFirstEditableNode(root)
             ?: return TypeTextResult(
                 false,
                 false,
-                "টাইপ করার জন্য কোনো টেক্সট বক্স (Editable Field) খুঁজে পাওয়া যায়নি।"
+                "No text input box found on this screen."
             )
 
-        val hintOrText = (targetNode.hintText?.toString().orEmpty() + " " +
-            targetNode.contentDescription?.toString().orEmpty()).lowercase()
-        val looksLikeSecretField = targetNode.isPassword ||
-            hintOrText.contains("password") ||
-            hintOrText.contains("পাসওয়ার্ড") ||
-            hintOrText.contains("otp") ||
-            hintOrText.contains("pin") ||
-            hintOrText.contains("পিন")
-
-        if (looksLikeSecretField) {
+        if (targetNode.isPassword) {
             return TypeTextResult(
                 success = false,
                 blockedByPasswordField = true,
-                messageBn = "নিরাপত্তা সতর্কতা: পাসওয়ার্ড বা ওটিপি বক্স শনাক্ত হয়েছে। অনুগ্রহ করে গোপনীয় তথ্য নিজে টাইপ করুন।"
+                messageBn = "Password field detected. Please type your password privately."
             )
         }
 
+        targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
             putCharSequence(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
@@ -240,10 +232,18 @@ class AgentAccessibilityService : AccessibilityService() {
             )
         }
         val ok = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        return if (ok) {
-            TypeTextResult(true, false, "টেক্সট বক্সে লেখা সম্পন্ন হয়েছে।")
+        if (ok) {
+            return TypeTextResult(true, false, "Typed '$text'.")
+        }
+
+        // Fallback: copy to clipboard and paste into field
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        cm?.setPrimaryClip(ClipData.newPlainText("agent_type", text))
+        val pasted = targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        return if (pasted) {
+            TypeTextResult(true, false, "Pasted '$text'.")
         } else {
-            TypeTextResult(false, false, "টেক্সট বক্সে লেখা সম্ভব হয়নি।")
+            TypeTextResult(false, false, "Could not type into the current field.")
         }
     }
 
@@ -259,31 +259,58 @@ class AgentAccessibilityService : AccessibilityService() {
     }
 
     fun scrollScreen(forward: Boolean): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val scrollable = findFirstScrollableNode(root) ?: return false
-        val action = if (forward) {
-            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-        } else {
-            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        val root = rootInActiveWindow
+        val scrollable = if (root != null) findFirstScrollableNode(root) else null
+        if (scrollable != null) {
+            val action = if (forward) {
+                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+            } else {
+                AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+            }
+            if (scrollable.performAction(action)) return true
         }
-        return scrollable.performAction(action)
+        val (w, h) = getScreenDimensions()
+        return if (forward) {
+            dispatchSwipeFireAndForget(w / 2, (h * 0.75).toInt(), w / 2, (h * 0.25).toInt(), 320L)
+        } else {
+            dispatchSwipeFireAndForget(w / 2, (h * 0.25).toInt(), w / 2, (h * 0.75).toInt(), 320L)
+        }
+    }
+
+    fun swipeHorizontal(left: Boolean): Boolean {
+        val (w, h) = getScreenDimensions()
+        return if (left) {
+            dispatchSwipeFireAndForget((w * 0.85).toInt(), h / 2, (w * 0.15).toInt(), h / 2, 300L)
+        } else {
+            dispatchSwipeFireAndForget((w * 0.15).toInt(), h / 2, (w * 0.85).toInt(), h / 2, 300L)
+        }
     }
 
     fun pressBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
     fun pressHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
     fun pressRecents(): Boolean = performGlobalAction(GLOBAL_ACTION_RECENTS)
+    fun openNotifications(): Boolean = performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+    fun openQuickSettings(): Boolean = performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+    fun takeScreenshot(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+    } else false
+
+    private fun normalizeBengaliText(s: String): String =
+        s.replace("\u09AF\u09BC", "\u09DF").lowercase().trim()
 
     private fun findNodeByLabel(
         node: AccessibilityNodeInfo?,
         label: String
     ): AccessibilityNodeInfo? {
         if (node == null || label.isBlank()) return null
-        val text = node.text?.toString().orEmpty()
-        val desc = node.contentDescription?.toString().orEmpty()
-        val idName = node.viewIdResourceName.orEmpty()
-        if (text.contains(label, ignoreCase = true) ||
-            desc.contains(label, ignoreCase = true) ||
-            idName.contains(label, ignoreCase = true)
+        val normLabel = normalizeBengaliText(label)
+        val text = normalizeBengaliText(node.text?.toString().orEmpty())
+        val desc = normalizeBengaliText(node.contentDescription?.toString().orEmpty())
+        val idName = node.viewIdResourceName.orEmpty().lowercase()
+
+        if ((text.isNotEmpty() && text.contains(normLabel)) ||
+            (desc.isNotEmpty() && desc.contains(normLabel)) ||
+            (idName.isNotEmpty() && idName.contains(normLabel))
         ) {
             return node
         }

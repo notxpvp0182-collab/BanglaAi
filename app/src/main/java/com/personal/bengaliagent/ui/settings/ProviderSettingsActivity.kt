@@ -223,7 +223,7 @@ class ProviderSettingsActivity : AppCompatActivity() {
                         detail = "Authenticating & discovering ${provider.displayName} models..."
                     )
 
-                    val result = withTimeoutOrNull(15_000L) {
+                    val result = withTimeoutOrNull(30_000L) {
                         router.connectAndVerifyProvider(provider, rawKey)
                     }
 
@@ -233,7 +233,7 @@ class ProviderSettingsActivity : AppCompatActivity() {
                             tvBadge,
                             tvStatus,
                             state = ConnectionState.NETWORK_ERROR,
-                            detail = "Connection timed out after 15 seconds. Tap Retry."
+                            detail = "Connection timed out after 30 seconds. Tap Retry."
                         )
                     } else if (result.success) {
                         btnRetry?.visibility = View.GONE
