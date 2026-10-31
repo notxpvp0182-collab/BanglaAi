@@ -434,8 +434,10 @@ class MainActivity : AppCompatActivity() {
             val honestMsg =
                 "Screen sharing and Accessibility inspection are currently off. Tap 'Screen: Off' above and approve Android's screen capture prompt so I can see and analyze your screen."
             appendSystemMessage(honestMsg, persist = false)
-            if (prefs.isTtsAutoSpeakEnabled()) {
-                voiceManager.speak(honestMsg)
+            lifecycleScope.launch {
+                if (prefs.isTtsAutoSpeakEnabled()) {
+                    voiceManager.speak(honestMsg)
+                }
             }
             refreshStatusUi()
             return
