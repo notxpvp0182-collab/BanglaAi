@@ -2,11 +2,6 @@ package com.personal.bengaliagent.data.security
 
 import com.personal.bengaliagent.domain.model.ProviderType
 
-/**
- * Validates that an API credential is non-empty and free of illegal whitespace.
- * NEVER enforces hardcoded prefixes (such as 'AIza', 'LIZ', or 'AQ'), allowing all current
- * and future Google AI Studio and xAI Grok authentication key formats.
- */
 object KeyValidator {
 
     data class ValidationResult(
@@ -37,10 +32,10 @@ object KeyValidator {
 
     fun redactSecrets(input: String): String {
         return input
-            .replace(Regex("AIza[0-9A-Za-z\\-_]{12,}"), "***REDACTED_KEY***")
-            .replace(Regex("AQ\\.[0-9A-Za-z\\-_\\.]{12,}"), "***REDACTED_KEY***")
-            .replace(Regex("xai-[0-9A-Za-z\\-_]{12,}"), "***REDACTED_KEY***")
-            .replace(Regex("gsk_[0-9A-Za-z]{12,}"), "***REDACTED_KEY***")
-            .replace(Regex("sk-or-[0-9A-Za-z\\-_]{12,}"), "***REDACTED_KEY***")
+            .replace(Regex("AIza[0-9A-Za-z\\-_]{12,}"), "AIza***REDACTED***")
+            .replace(Regex("AQ\\.[0-9A-Za-z\\-_\\.]{12,}"), "AQ.***REDACTED***")
+            .replace(Regex("xai-[0-9A-Za-z\\-_]{12,}"), "xai-***REDACTED***")
+            .replace(Regex("gsk_[0-9A-Za-z]{12,}"), "gsk_***REDACTED***")
+            .replace(Regex("sk-or-[0-9A-Za-z\\-_]{12,}"), "sk-or-***REDACTED***")
     }
 }

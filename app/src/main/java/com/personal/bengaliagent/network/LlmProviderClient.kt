@@ -275,10 +275,7 @@ class LlmProviderClient(
 
                 val supportsLive = provider == ProviderType.GROK && (
                     lower.contains("realtime") ||
-                        lower.contains("voice") ||
-                        lower.startsWith("grok-2") ||
-                        lower.startsWith("grok-3") ||
-                        lower.startsWith("grok-4")
+                        lower.contains("voice")
                     )
                 val supportsVision = lower.contains("vision") ||
                     lower.startsWith("grok-2-vision") ||
